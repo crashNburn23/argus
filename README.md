@@ -18,8 +18,6 @@ argus> /vuln CVE-2021-44228
 Runs on Claude or a local Ollama model. All threat-feed integrations are optional and
 activate automatically when you add an API key.
 
----
-
 ## Setup
 
 ```bash
@@ -51,8 +49,6 @@ RECORDED_FUTURE_API_KEY=
 Free sources (no key needed): MITRE ATT&CK, NVD, CISA KEV, URLhaus, web search.
 
 Run `argus doctor` to check what's configured and ready before you start.
-
----
 
 ## Interactive session
 
@@ -86,8 +82,6 @@ slash commands. Arrow keys scroll history. Bottom bar shows active model and the
 
 Themes recolour the entire session history immediately so you can see the difference.
 
----
-
 ## One-shot commands
 
 ```bash
@@ -117,8 +111,6 @@ argus ask "Summarise the ransomware landscape this week"
 
 All commands accept `--json` for machine-readable output.
 
----
-
 ## Benchmarks
 
 Eight synthetic IR tickets with known-correct decisions, ATT&CK techniques, and response
@@ -129,8 +121,6 @@ argus benchmark run --all
 argus benchmark run --all --minimum-score 0.8   # non-zero exit if score drops
 argus benchmark run --all --json
 ```
-
----
 
 ## How it works
 
@@ -150,8 +140,6 @@ Each agent runs its own model tool-use loop against real APIs, then synthesises 
 results into a structured response. The orchestrator combines everything into a final
 answer.
 
----
-
 ## Development
 
 ```bash
@@ -161,3 +149,7 @@ uv run mypy src/argus --ignore-missing-imports
 ```
 
 CI runs all three on every push.
+
+## License
+
+MIT © 2026 crashNburn23
