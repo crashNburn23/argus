@@ -18,8 +18,8 @@ build/
 # Runtime data
 .cache/
 .data/
-reports/
-benchmark-reports/
+/reports/
+/benchmark-reports/
 *.db
 *.db-wal
 *.db-shm
