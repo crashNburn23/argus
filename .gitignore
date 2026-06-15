@@ -1,0 +1,42 @@
+# Environment and secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Runtime data
+.cache/
+.data/
+reports/
+benchmark-reports/
+*.db
+*.db-wal
+*.db-shm
+
+# Argus user state
+.argus_history
+.argus_config.json
+.argus_sessions/
+
+# Editor / IDE
+.claude/
+.vscode/
+.idea/
+*.swp
+*~
+
+# Working / internal docs
+BACKLOG.md
+UX_BACKLOG.md
+PROGRESS.md

