@@ -6,7 +6,7 @@ from typing import Annotated, Any
 
 import typer
 
-from argus.cli.output import print_agent_error, render_vuln_result, working
+from argus.cli.output import print_agent_error, render_vuln_result, status, thinking
 
 app = typer.Typer(help="Vulnerability intelligence")
 
@@ -20,8 +20,9 @@ def lookup_cve(
     from argus.agents.vuln_agent import VulnIntelAgent
 
     async def _go() -> Any:
-        with working(f"Looking up {len(cve_ids)} CVE(s)...", enabled=not json):
-            return await VulnIntelAgent().run(cve_ids=cve_ids)
+        progress = status if not json else None
+        with thinking(f"looking up {len(cve_ids)} CVE(s)", enabled=not json):
+            return await VulnIntelAgent(progress=progress).run(cve_ids=cve_ids)
 
     try:
         result = asyncio.run(_go())
@@ -43,8 +44,12 @@ def search_vulns(
     from argus.agents.vuln_agent import VulnIntelAgent
 
     async def _go() -> Any:
-        with working("Searching vulnerability intelligence...", enabled=not json):
-            return await VulnIntelAgent().run(keywords=keyword or "", severity_threshold=severity)
+        progress = status if not json else None
+        with thinking("searching vulnerability intelligence", enabled=not json):
+            return await VulnIntelAgent(progress=progress).run(
+                keywords=keyword or "",
+                severity_threshold=severity,
+            )
 
     try:
         result = asyncio.run(_go())

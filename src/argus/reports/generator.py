@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ from argus.storage.models_db import ReportRecord
 log = structlog.get_logger()
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
+ProgressCallback = Callable[[str], None]
 
 
 def _get_jinja_env() -> Environment:
@@ -55,8 +57,13 @@ def _get_period(report_type: ReportType, now: datetime) -> tuple[datetime, datet
 
 
 class ReportGenerator:
-    def __init__(self) -> None:
+    def __init__(self, progress: ProgressCallback | None = None) -> None:
         self.jinja = _get_jinja_env()
+        self.progress = progress
+
+    def _progress(self, message: str) -> None:
+        if self.progress is not None:
+            self.progress(message)
 
     async def generate(
         self,
@@ -74,6 +81,7 @@ class ReportGenerator:
         period_start, period_end = _get_period(report_type, now)
 
         log.info("report.generate.start", report_type=report_type.value, scope=scope)
+        self._progress(f"report: defining {report_type.value} report scope and period")
 
         report = CTIReport(
             report_type=report_type,
@@ -88,6 +96,7 @@ class ReportGenerator:
         )
 
         # Collect intel from specialized agents in parallel
+        self._progress("report: collecting IOC, actor, and vulnerability intelligence")
         gather_results: tuple[Any, ...] = await asyncio.gather(
             self._collect_ioc_intel(scope),
             self._collect_threat_actor_intel(scope),
@@ -107,12 +116,14 @@ class ReportGenerator:
 
         # Generate narrative via ReportAgent; log failures but keep the report.
         try:
-            report = await ReportAgent().run(report=report, scope=scope)
+            self._progress("report: drafting narrative from collected findings")
+            report = await ReportAgent(progress=self.progress).run(report=report, scope=scope)
         except AgentError as e:
             log.error("report.narrative_failed", category=e.category, error=str(e))
             report.executive_summary = f"[Narrative generation failed: {e}]"
 
         # Render Jinja2 template
+        self._progress("report: rendering final markdown")
         report.content = self.render(report)
 
         if save:
@@ -133,7 +144,11 @@ class ReportGenerator:
         if isinstance(classification, str):
             classification = ReportClassification(classification.upper())
         now = datetime.now(tz=UTC)
-        alert_summary = await TriageAgent().run(alerts=alerts, context=context)
+        self._progress("report: triaging incident alerts")
+        alert_summary = await TriageAgent(progress=self.progress).run(
+            alerts=alerts,
+            context=context,
+        )
         timestamps = [
             item.alert.timestamp for item in alert_summary.triaged_alerts if item.alert.timestamp
         ]
@@ -147,7 +162,9 @@ class ReportGenerator:
             classification=classification,
             alert_summary=alert_summary,
         )
-        report = await ReportAgent().run(report=report, scope=context)
+        self._progress("report: writing incident narrative")
+        report = await ReportAgent(progress=self.progress).run(report=report, scope=context)
+        self._progress("report: rendering final markdown")
         report.content = self.render(report)
         if save:
             self._save(report)
@@ -160,15 +177,15 @@ class ReportGenerator:
                 indicators=[],
                 summary="No IOC scope was provided for this report.",
             )
-        return await IOCEnrichmentAgent().run(indicators=indicators)
+        return await IOCEnrichmentAgent(progress=self.progress).run(indicators=indicators)
 
     async def _collect_threat_actor_intel(self, scope: str) -> Any:
         query = scope if scope else "current top threat actors"
-        return await ThreatActorAgent().run(query=query)
+        return await ThreatActorAgent(progress=self.progress).run(query=query)
 
     async def _collect_vuln_intel(self, scope: str, report_type: ReportType) -> Any:
         threshold = "critical" if report_type in (ReportType.DAILY, ReportType.INCIDENT) else "high"
-        return await VulnIntelAgent().run(
+        return await VulnIntelAgent(progress=self.progress).run(
             keywords=scope or "critical",
             severity_threshold=threshold,
         )

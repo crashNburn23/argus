@@ -7,7 +7,7 @@ from typing import Annotated, Any
 
 import typer
 
-from argus.cli.output import print_agent_error, render_markdown, working
+from argus.cli.output import print_agent_error, render_markdown, status, thinking
 
 app = typer.Typer(help="Ask natural language threat intelligence questions")
 
@@ -21,8 +21,9 @@ def ask(
     from argus.agents.orchestrator import CTIOrchestrator
 
     async def _go() -> Any:
-        with working("Investigating query...", enabled=not json):
-            return await CTIOrchestrator().run(user_query=question)
+        progress = status if not json else None
+        with thinking("argus is thinking", enabled=not json):
+            return await CTIOrchestrator(progress=progress).run(user_query=question)
 
     try:
         answer = asyncio.run(_go())

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -9,10 +11,12 @@ from typing import Any
 
 from pydantic import BaseModel
 from rich.console import Console
+from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
+from rich.text import Text
 from rich.theme import Theme
 
 # ---------------------------------------------------------------------------
@@ -324,9 +328,93 @@ def render_markdown(text: str) -> None:
     console.print(Markdown(text))
 
 
+class _ThinkingIndicator:
+    _frames = ("◐", "◓", "◑", "◒")
+
+    def __init__(self, message: str) -> None:
+        self._message = message
+        self._frame = 0
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._live: Live | None = None
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self) -> "_ThinkingIndicator":
+        global _active_thinking_indicator
+        self._previous = _active_thinking_indicator
+        _active_thinking_indicator = self
+        self._live = Live(
+            self._render(),
+            console=console.raw,
+            refresh_per_second=12,
+            transient=True,
+        )
+        self._live.start()
+        self._thread = threading.Thread(target=self._animate, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        global _active_thinking_indicator
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=0.5)
+        if self._live is not None:
+            self._live.stop()
+        _active_thinking_indicator = self._previous
+
+    def update(self, message: str) -> None:
+        with self._lock:
+            self._message = message
+        self._refresh()
+
+    def _animate(self) -> None:
+        while not self._stop.wait(0.12):
+            with self._lock:
+                self._frame = (self._frame + 1) % len(self._frames)
+            self._refresh()
+
+    def _refresh(self) -> None:
+        if self._live is not None:
+            self._live.update(self._render())
+
+    def _render(self) -> Text:
+        with self._lock:
+            frame = self._frames[self._frame]
+            message = self._message
+        text = Text()
+        text.append("⟐ ", style="cp.magenta")
+        text.append(frame, style="cp.cyan")
+        text.append(" ◉ ", style="cp.magenta")
+        text.append(frame, style="cp.cyan")
+        text.append(" ⟐", style="cp.magenta")
+        text.append(f"  {message}")
+        return text
+
+
+_active_thinking_indicator: _ThinkingIndicator | None = None
+
+
+@contextmanager
+def thinking(
+    message: str = "argus is thinking",
+    enabled: bool = True,
+) -> Generator[None, None, None]:
+    """Show the animated evil-eye thinking indicator for human-readable output."""
+    if not enabled:
+        yield
+        return
+    with _ThinkingIndicator(message):
+        yield
+
+
 def status(msg: str) -> None:
-    """Print a transient working-indicator line."""
-    console.print(f"[cp.dim]⟳  {msg}[/cp.dim]")
+    """Update active thinking state, or print a status line when no indicator is active."""
+    if _active_thinking_indicator is not None:
+        _active_thinking_indicator.update(msg)
+    else:
+        console.print(f"[cp.cyan]⟳[/cp.cyan]  {msg}")
+
 
 
 # ---------------------------------------------------------------------------
@@ -364,7 +452,9 @@ def render_ioc_result(result: Any, as_json: bool = False) -> None:
         ))
 
     if result.high_priority_iocs:
-        console.print(f"\n[cp.red]HIGH PRIORITY ▸[/cp.red] {', '.join(result.high_priority_iocs)}")
+        console.print(
+            f"\n[cp.red]HIGH PRIORITY ▸[/cp.red] {', '.join(result.high_priority_iocs)}"
+        )
     if result.recommended_actions:
         console.print("\n[cp.cyan]Recommended Actions[/cp.cyan]")
         for action in result.recommended_actions:

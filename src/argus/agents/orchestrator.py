@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
+from collections.abc import Callable
 from typing import Any
 
 import structlog
@@ -21,6 +23,9 @@ from argus.storage.models_db import AgentRunRecord
 log = structlog.get_logger()
 
 MAX_ITERATIONS = 8
+MAX_COMPLETION_RETRIES = 2   # verification cycles after the main loop
+MAX_GAP_FILL_ITERATIONS = 4  # agent calls allowed per gap-fill cycle
+ProgressCallback = Callable[[str], None]
 
 _SYSTEM = """\
 You are the CTI Orchestrator — a senior threat intelligence analyst who coordinates
@@ -35,6 +40,28 @@ You have access to the following specialized agents as tools:
 Decide which agents to invoke based on the user's request. You can invoke multiple agents.
 Synthesize their results into a clear, actionable response.
 Be specific and reference evidence from the agents' findings."""
+
+_COMPLETION_CHECK_SYSTEM = """\
+You are a senior CTI analyst verifying that an analysis fully answers the original question.
+
+Respond with a JSON object only — no prose, no markdown fences:
+{
+  "complete": true | false,
+  "retriable_gaps": ["description"],
+  "permanent_gaps": ["description"]
+}
+
+Definitions:
+- complete: true only if every distinct part of the original question is addressed.
+- retriable_gaps: gaps where invoking an agent with a better or different query is likely
+  to yield useful data (the agent was never called, or a different angle may help).
+- permanent_gaps: gaps caused by tool errors, API failures, rate limits, or data that
+  simply does not exist. Retrying would not help — document them honestly.
+
+Rules:
+- "No data found" is a valid answer, not a gap.
+- Do NOT mark a gap as retriable if a tool already attempted it and returned an error.
+- Prefer marking ambiguous gaps as permanent over triggering endless retries."""
 
 # Tool definitions for each sub-agent (registered as Claude tools)
 _AGENT_TOOL_DEFINITIONS = [
@@ -137,18 +164,42 @@ _AGENT_TOOL_DEFINITIONS = [
 
 
 class CTIOrchestrator:
-    def __init__(self, persistent: bool = False) -> None:
+    def __init__(
+        self,
+        persistent: bool = False,
+        progress: ProgressCallback | None = None,
+    ) -> None:
         settings = get_settings()
         self.client = create_llm_client(settings)
         self.model = settings.model
         self._persistent = persistent
+        self.progress = progress
         self._conversation: list[dict[str, Any]] = []
         self._agents = {
-            "ioc_enrichment_agent": IOCEnrichmentAgent(),
-            "threat_actor_agent": ThreatActorAgent(),
-            "vuln_intel_agent": VulnIntelAgent(),
-            "triage_agent": TriageAgent(),
+            "ioc_enrichment_agent": IOCEnrichmentAgent(progress=progress),
+            "threat_actor_agent": ThreatActorAgent(progress=progress),
+            "vuln_intel_agent": VulnIntelAgent(progress=progress),
+            "triage_agent": TriageAgent(progress=progress),
         }
+
+    def _progress(self, message: str) -> None:
+        callback = getattr(self, "progress", None)
+        if callback is not None:
+            callback(message)
+
+    @staticmethod
+    def _summarize_agent_input(tool_input: dict[str, Any]) -> str:
+        if indicators := tool_input.get("indicators"):
+            return f"{len(indicators)} indicator(s)"
+        if cve_ids := tool_input.get("cve_ids"):
+            return ", ".join(str(cve) for cve in cve_ids[:3])
+        if query := tool_input.get("query"):
+            return str(query)[:80]
+        if alerts := tool_input.get("alerts"):
+            return f"{len(alerts)} alert(s)"
+        if keywords := tool_input.get("keywords"):
+            return str(keywords)[:80]
+        return "the current request"
 
     @property
     def conversation_turns(self) -> int:
@@ -162,6 +213,8 @@ class CTIOrchestrator:
         self._conversation.clear()
 
     async def _invoke_agent(self, tool_name: str, tool_input: dict[str, Any]) -> str:
+        detail = self._summarize_agent_input(tool_input)
+        self._progress(f"orchestrator: routing {detail} to {tool_name}")
         try:
             if tool_name == "ioc_enrichment_agent":
                 result = await self._agents["ioc_enrichment_agent"].run(**tool_input)
@@ -173,6 +226,7 @@ class CTIOrchestrator:
                 result = await self._agents["triage_agent"].run(**tool_input)
             else:
                 return json.dumps({"error": f"Unknown agent: {tool_name}"})
+            self._progress(f"orchestrator: {tool_name} returned findings")
             return str(result.model_dump_json())
         except AgentError as e:
             log.error(
@@ -194,10 +248,14 @@ class CTIOrchestrator:
         ]
         total_input = 0
         total_output = 0
+        final_text: str | None = None
 
         log.info("orchestrator.start", query_len=len(user_query))
+        self._progress("orchestrator: reading request and selecting analysis path")
 
         for iteration in range(MAX_ITERATIONS):
+            if iteration > 0:
+                self._progress("orchestrator: reviewing agent findings")
             response = await asyncio.to_thread(
                 self.client.create_message,
                 model=self.model,
@@ -219,14 +277,14 @@ class CTIOrchestrator:
                 final_text = "\n".join(
                     b.text for b in response.content if hasattr(b, "text")
                 )
+                self._progress("orchestrator: composing initial answer")
                 if getattr(self, "_persistent", False):
                     self._conversation = [
                         *messages,
                         {"role": "assistant", "content": response.content},
                     ]
-                self._log_run(user_query, final_text, total_input, total_output,
-                              time.monotonic() - start)
-                return final_text
+                messages.append({"role": "assistant", "content": response.content})
+                break
 
             if response.stop_reason != "tool_use":
                 break
@@ -236,6 +294,7 @@ class CTIOrchestrator:
             for block in response.content:
                 if block.type == "tool_use":
                     log.info("orchestrator.agent_call", agent=block.name)
+                    self._progress(f"orchestrator: decided {block.name} is needed")
                     agent_result = await self._invoke_agent(block.name, dict(block.input))
                     tool_results.append({
                         "type": "tool_result",
@@ -244,10 +303,150 @@ class CTIOrchestrator:
                     })
             messages.append({"role": "user", "content": tool_results})
 
-        self._log_run(user_query, "", total_input, total_output, time.monotonic() - start)
-        if getattr(self, "_persistent", False):
-            self._conversation = messages
-        return "Orchestrator could not produce a response."
+        if final_text is None:
+            self._log_run(user_query, "", total_input, total_output, time.monotonic() - start)
+            if getattr(self, "_persistent", False):
+                self._conversation = messages
+            return "Orchestrator could not produce a response."
+
+        # --- Completion verification loop ---
+        permanent_gaps: list[str] = []
+        for check_attempt in range(MAX_COMPLETION_RETRIES):
+            check = await self._check_completion(user_query, final_text, check_attempt)
+            log.info(
+                "orchestrator.completion_check",
+                attempt=check_attempt,
+                complete=check["complete"],
+                retriable=len(check["retriable_gaps"]),
+                permanent=len(check["permanent_gaps"]),
+            )
+
+            if check["complete"]:
+                self._progress("orchestrator: analysis verified complete")
+                permanent_gaps = []
+                break
+
+            permanent_gaps = check["permanent_gaps"]
+
+            if not check["retriable_gaps"]:
+                self._progress("orchestrator: remaining gaps are not retriable")
+                break
+
+            self._progress(
+                f"orchestrator: filling {len(check['retriable_gaps'])} gap(s) "
+                f"(pass {check_attempt + 1}/{MAX_COMPLETION_RETRIES})"
+            )
+            updated = await self._fill_gaps(
+                user_query, final_text, check["retriable_gaps"]
+            )
+            if updated is not None:
+                final_text = updated
+            else:
+                self._progress("orchestrator: gap-fill produced no new results")
+                break
+
+        if permanent_gaps:
+            lines = "\n".join(f"- {g}" for g in permanent_gaps)
+            final_text += f"\n\n---\n**Note — could not complete the following:**\n{lines}"
+
+        self._log_run(user_query, final_text, total_input, total_output, time.monotonic() - start)
+        return final_text
+
+    async def _check_completion(
+        self,
+        original_query: str,
+        current_answer: str,
+        attempt: int,
+    ) -> dict[str, Any]:
+        """Ask the model to verify the answer covers the original query.
+
+        Returns a dict with keys: complete, retriable_gaps, permanent_gaps.
+        Failures default to complete=True so a broken check never loops forever.
+        """
+        self._progress(
+            f"orchestrator: verifying completeness "
+            f"(check {attempt + 1}/{MAX_COMPLETION_RETRIES})"
+        )
+        prompt = (
+            f"ORIGINAL QUESTION:\n{original_query}\n\n"
+            f"CURRENT ANALYSIS:\n{current_answer}"
+        )
+        try:
+            response = await asyncio.to_thread(
+                self.client.create_message,
+                model=self.model,
+                max_tokens=1024,
+                system=_COMPLETION_CHECK_SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = "\n".join(b.text for b in response.content if hasattr(b, "text")).strip()
+            fence = re.search(r"```(?:json)?\s*\n([\s\S]*?)```", text)
+            if fence:
+                text = fence.group(1).strip()
+            data = json.loads(text)
+            return {
+                "complete": bool(data.get("complete", False)),
+                "retriable_gaps": [str(g) for g in data.get("retriable_gaps", [])],
+                "permanent_gaps": [str(g) for g in data.get("permanent_gaps", [])],
+            }
+        except Exception as exc:
+            log.warning("orchestrator.completion_check_failed", error=str(exc))
+            # Fail safe: treat as complete so we never loop on a broken check
+            return {"complete": True, "retriable_gaps": [], "permanent_gaps": []}
+
+    async def _fill_gaps(
+        self,
+        original_query: str,
+        current_answer: str,
+        gaps: list[str],
+    ) -> str | None:
+        """Run a tight agent loop to address specific gaps. Returns updated answer or None."""
+        gap_lines = "\n".join(f"- {g}" for g in gaps)
+        fill_messages: list[dict[str, Any]] = [
+            {
+                "role": "user",
+                "content": (
+                    f"Original question: {original_query}\n\n"
+                    f"Current analysis:\n{current_answer}\n\n"
+                    f"The following gaps remain unanswered:\n{gap_lines}\n\n"
+                    "Use the available agents to address these gaps. "
+                    "If a tool returns an error or no data, acknowledge it and move on — "
+                    "do not retry a tool that already failed. "
+                    "Return a complete, updated analysis that incorporates any new findings."
+                ),
+            }
+        ]
+        try:
+            for iteration in range(MAX_GAP_FILL_ITERATIONS):
+                response = await asyncio.to_thread(
+                    self.client.create_message,
+                    model=self.model,
+                    max_tokens=8192,
+                    system=_SYSTEM,
+                    tools=_AGENT_TOOL_DEFINITIONS,
+                    messages=fill_messages,
+                )
+                if response.stop_reason == "end_turn":
+                    return "\n".join(
+                        b.text for b in response.content if hasattr(b, "text")
+                    )
+                if response.stop_reason != "tool_use":
+                    break
+                fill_messages.append({"role": "assistant", "content": response.content})
+                tool_results = []
+                for block in response.content:
+                    if block.type == "tool_use":
+                        self._progress(f"orchestrator: gap-fill calling {block.name}")
+                        agent_result = await self._invoke_agent(block.name, dict(block.input))
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": agent_result,
+                        })
+                fill_messages.append({"role": "user", "content": tool_results})
+        except Exception as exc:
+            log.warning("orchestrator.gap_fill_failed", error=str(exc))
+        return None
 
     def _log_run(
         self, input_data: str, output: str, input_tok: int, output_tok: int, duration: float

@@ -33,6 +33,7 @@ from argus.cli.output import (
     print_agent_error,
     render_markdown,
     status,
+    thinking,
 )
 from argus.storage.sessions import (
     delete_session,
@@ -50,40 +51,40 @@ _PT_STYLES: dict[str, dict[str, str]] = {
     "analyst": {
         "argus-name":  "#6677aa bold",
         "argus-arrow": "#4499cc bold",
-        "completion-menu":                    "bg:#000d1a #4499cc",
-        "completion-menu.completion":         "bg:#000d1a #4499cc",
-        "completion-menu.completion.current": "bg:#334466 #ffffff bold",
-        "completion-menu.meta":               "bg:#000d1a #445588",
-        "completion-menu.meta.current":       "bg:#334466 #aaaacc",
-        "completion-menu.multi-column-meta":  "bg:#000d1a #4499cc",
-        "scrollbar.background": "bg:#000d1a",
-        "scrollbar.button":     "bg:#334466",
+        "completion-menu":                    "bg:#07111f #c8d3df",
+        "completion-menu.completion":         "bg:#07111f #c8d3df",
+        "completion-menu.completion.current": "bg:#1f3148 #ffffff bold",
+        "completion-menu.meta":               "bg:#07111f #6f8398",
+        "completion-menu.meta.current":       "bg:#1f3148 #b7c4d6",
+        "completion-menu.multi-column-meta":  "bg:#07111f #6f8398",
+        "scrollbar.background": "bg:#07111f",
+        "scrollbar.button":     "bg:#1f3148",
         "auto-suggest":         "#334455",
         "bottom-toolbar":       "bg:#000d1a #334466",
     },
     "contrast": {
         "argus-name":  "bold ansimagenta",
         "argus-arrow": "bold ansicyan",
-        "completion-menu":                    "bg:ansiblack ansicyan",
-        "completion-menu.completion":         "bg:ansiblack ansicyan",
-        "completion-menu.completion.current": "bg:ansiblue bold ansiwhite",
-        "completion-menu.meta":               "bg:ansiblack ansiblue",
-        "completion-menu.meta.current":       "bg:ansiblue ansiwhite",
+        "completion-menu":                    "bg:ansiblack ansiwhite",
+        "completion-menu.completion":         "bg:ansiblack ansiwhite",
+        "completion-menu.completion.current": "bg:ansiwhite ansiblack bold",
+        "completion-menu.meta":               "bg:ansiblack ansicyan",
+        "completion-menu.meta.current":       "bg:ansiwhite ansiblack",
         "completion-menu.multi-column-meta":  "bg:ansiblack ansicyan",
         "scrollbar.background": "bg:ansiblack",
-        "scrollbar.button":     "bg:ansiblue",
+        "scrollbar.button":     "bg:ansiwhite",
         "auto-suggest":         "ansiblue",
         "bottom-toolbar":       "bg:ansiblack bold ansicyan",
     },
     "mono": {
         "argus-name":  "bold underline",
         "argus-arrow": "bold",
-        "completion-menu":                    "reverse",
-        "completion-menu.completion":         "reverse",
-        "completion-menu.completion.current": "bold",
-        "completion-menu.meta":               "dim reverse",
-        "completion-menu.meta.current":       "bold",
-        "completion-menu.multi-column-meta":  "reverse",
+        "completion-menu":                    "",
+        "completion-menu.completion":         "",
+        "completion-menu.completion.current": "reverse bold",
+        "completion-menu.meta":               "dim",
+        "completion-menu.meta.current":       "reverse",
+        "completion-menu.multi-column-meta":  "dim",
         "scrollbar.background": "",
         "scrollbar.button":     "reverse",
         "auto-suggest":         "italic",
@@ -92,42 +93,42 @@ _PT_STYLES: dict[str, dict[str, str]] = {
     "midnight": {
         "argus-name":  "#a070a0 bold",
         "argus-arrow": "#7ca2d6 bold",
-        "completion-menu":                    "bg:#0d1a2e #7ca2d6",
-        "completion-menu.completion":         "bg:#0d1a2e #7ca2d6",
-        "completion-menu.completion.current": "bg:#2a3a5a #ffffff bold",
-        "completion-menu.meta":               "bg:#0d1a2e #6b6aad",
-        "completion-menu.meta.current":       "bg:#2a3a5a #c0c0e0",
-        "completion-menu.multi-column-meta":  "bg:#0d1a2e #7ca2d6",
-        "scrollbar.background": "bg:#0d1a2e",
-        "scrollbar.button":     "bg:#2a3a5a",
+        "completion-menu":                    "bg:#101827 #cad5e2",
+        "completion-menu.completion":         "bg:#101827 #cad5e2",
+        "completion-menu.completion.current": "bg:#273653 #ffffff bold",
+        "completion-menu.meta":               "bg:#101827 #788ca8",
+        "completion-menu.meta.current":       "bg:#273653 #c2cce0",
+        "completion-menu.multi-column-meta":  "bg:#101827 #788ca8",
+        "scrollbar.background": "bg:#101827",
+        "scrollbar.button":     "bg:#273653",
         "auto-suggest":         "#3a4a5e",
         "bottom-toolbar":       "bg:#0d1a2e #2a3a5a",
     },
     "nord": {
         "argus-name":  "#b48ead bold",
         "argus-arrow": "#88c0d0 bold",
-        "completion-menu":                    "bg:#2e3440 #88c0d0",
-        "completion-menu.completion":         "bg:#2e3440 #88c0d0",
-        "completion-menu.completion.current": "bg:#4c566a #eceff4 bold",
-        "completion-menu.meta":               "bg:#2e3440 #81a1c1",
-        "completion-menu.meta.current":       "bg:#4c566a #d8dee9",
-        "completion-menu.multi-column-meta":  "bg:#2e3440 #88c0d0",
-        "scrollbar.background": "bg:#2e3440",
-        "scrollbar.button":     "bg:#4c566a",
+        "completion-menu":                    "bg:#252b35 #d8dee9",
+        "completion-menu.completion":         "bg:#252b35 #d8dee9",
+        "completion-menu.completion.current": "bg:#3b4252 #eceff4 bold",
+        "completion-menu.meta":               "bg:#252b35 #8f9eb5",
+        "completion-menu.meta.current":       "bg:#3b4252 #c8d1df",
+        "completion-menu.multi-column-meta":  "bg:#252b35 #8f9eb5",
+        "scrollbar.background": "bg:#252b35",
+        "scrollbar.button":     "bg:#3b4252",
         "auto-suggest":         "#4c566a",
         "bottom-toolbar":       "bg:#2e3440 #3b4252",
     },
     "ember": {
         "argus-name":  "#d4714f bold",
         "argus-arrow": "#e8a26b bold",
-        "completion-menu":                    "bg:#1a0d05 #e8a26b",
-        "completion-menu.completion":         "bg:#1a0d05 #e8a26b",
-        "completion-menu.completion.current": "bg:#6b4422 #ffffff bold",
-        "completion-menu.meta":               "bg:#1a0d05 #996644",
-        "completion-menu.meta.current":       "bg:#6b4422 #e0c8a0",
-        "completion-menu.multi-column-meta":  "bg:#1a0d05 #e8a26b",
-        "scrollbar.background": "bg:#1a0d05",
-        "scrollbar.button":     "bg:#6b4422",
+        "completion-menu":                    "bg:#1b130d #e0d3c1",
+        "completion-menu.completion":         "bg:#1b130d #e0d3c1",
+        "completion-menu.completion.current": "bg:#54331f #ffffff bold",
+        "completion-menu.meta":               "bg:#1b130d #9b846e",
+        "completion-menu.meta.current":       "bg:#54331f #ddc3a8",
+        "completion-menu.multi-column-meta":  "bg:#1b130d #9b846e",
+        "scrollbar.background": "bg:#1b130d",
+        "scrollbar.button":     "bg:#54331f",
         "auto-suggest":         "#5a3a22",
         "bottom-toolbar":       "bg:#1a0d05 #6b4422",
     },
@@ -332,9 +333,9 @@ async def _handle_slash(
         else:
             from argus.agents.ioc_agent import IOCEnrichmentAgent
             from argus.cli.output import render_ioc_result
-            status(f"enriching {', '.join(args)}")
             try:
-                result: Any = await IOCEnrichmentAgent().run(indicators=args)
+                with thinking(f"enriching {', '.join(args)}"):
+                    result: Any = await IOCEnrichmentAgent(progress=status).run(indicators=args)
                 render_ioc_result(result)
             except Exception as exc:
                 print_agent_error(exc)
@@ -346,9 +347,9 @@ async def _handle_slash(
             from argus.agents.threat_actor_agent import ThreatActorAgent
             from argus.cli.output import render_threat_actor_result
             query_str = " ".join(args)
-            status(f"researching {query_str}")
             try:
-                result2: Any = await ThreatActorAgent().run(query=query_str)
+                with thinking(f"researching {query_str}"):
+                    result2: Any = await ThreatActorAgent(progress=status).run(query=query_str)
                 render_threat_actor_result(result2)
             except Exception as exc:
                 print_agent_error(exc)
@@ -359,9 +360,9 @@ async def _handle_slash(
         else:
             from argus.agents.vuln_agent import VulnIntelAgent
             from argus.cli.output import render_vuln_result
-            status(f"looking up {', '.join(args)}")
             try:
-                result3: Any = await VulnIntelAgent().run(cve_ids=args)
+                with thinking(f"looking up {', '.join(args)}"):
+                    result3: Any = await VulnIntelAgent(progress=status).run(cve_ids=args)
                 render_vuln_result(result3)
             except Exception as exc:
                 print_agent_error(exc)
@@ -373,9 +374,12 @@ async def _handle_slash(
             console.print(f"[cp.amber]usage:[/cp.amber] /report <{'|'.join(valid)}>")
         else:
             from argus.reports.generator import ReportGenerator
-            status(f"generating {report_type} report")
             try:
-                rpt = await ReportGenerator().generate(report_type=report_type, save=False)
+                with thinking(f"generating {report_type} report"):
+                    rpt = await ReportGenerator(progress=status).generate(
+                        report_type=report_type,
+                        save=False,
+                    )
                 render_markdown(rpt.content)
             except Exception as exc:
                 print_agent_error(exc)
@@ -387,10 +391,10 @@ async def _handle_slash(
             from argus.agents.triage_agent import TriageAgent
             from argus.cli.output import render_triage_result
             raw_log = " ".join(args)
-            status("triaging alert")
             alert = {"alert_id": "interactive-1", "raw_log": raw_log}
             try:
-                result4: Any = await TriageAgent().run(alerts=[alert])
+                with thinking("triaging alert"):
+                    result4: Any = await TriageAgent(progress=status).run(alerts=[alert])
                 render_triage_result(result4)
             except Exception as exc:
                 print_agent_error(exc)
@@ -667,7 +671,7 @@ async def _interactive_loop() -> None:
 
     from argus.agents.orchestrator import CTIOrchestrator
 
-    orchestrator = CTIOrchestrator(persistent=True)
+    orchestrator = CTIOrchestrator(persistent=True, progress=status)
 
     # Session state tracking
     session_id = generate_session_id()
@@ -719,7 +723,8 @@ async def _interactive_loop() -> None:
             continue
 
         try:
-            answer = await orchestrator.run(user_query=line)
+            with thinking("argus is thinking"):
+                answer = await orchestrator.run(user_query=line)
             render_markdown(answer)
             # Track exchanges for session persistence
             session_state["exchanges"].append({"role": "user", "text": line})

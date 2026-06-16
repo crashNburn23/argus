@@ -6,7 +6,7 @@ from typing import Annotated, Any
 
 import typer
 
-from argus.cli.output import print_agent_error, render_threat_actor_result, working
+from argus.cli.output import print_agent_error, render_threat_actor_result, status, thinking
 
 app = typer.Typer(help="Research threat actors and campaigns")
 
@@ -21,8 +21,12 @@ def research_actor(
     from argus.agents.threat_actor_agent import ThreatActorAgent
 
     async def _go() -> Any:
-        with working(f"Researching {name}...", enabled=not json):
-            return await ThreatActorAgent().run(query=name, include_ttps=include_ttps)
+        progress = status if not json else None
+        with thinking(f"researching {name}", enabled=not json):
+            return await ThreatActorAgent(progress=progress).run(
+                query=name,
+                include_ttps=include_ttps,
+            )
 
     try:
         result = asyncio.run(_go())
@@ -41,8 +45,9 @@ def research_campaign(
     from argus.agents.threat_actor_agent import ThreatActorAgent
 
     async def _go() -> Any:
-        with working(f"Researching campaign {name}...", enabled=not json):
-            return await ThreatActorAgent().run(query=f"campaign: {name}")
+        progress = status if not json else None
+        with thinking(f"researching campaign {name}", enabled=not json):
+            return await ThreatActorAgent(progress=progress).run(query=f"campaign: {name}")
 
     try:
         result = asyncio.run(_go())

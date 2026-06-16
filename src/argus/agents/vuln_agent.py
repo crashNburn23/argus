@@ -64,6 +64,7 @@ class VulnIntelAgent(BaseAgent):
         keywords: str = "",
         severity_threshold: str = "high",
     ) -> VulnIntelResult:
+        self._progress("vuln_intel: planning NVD, KEV, and exposure checks")
         parts = []
         if cve_ids:
             parts.append(f"Look up these CVEs: {', '.join(cve_ids)}")

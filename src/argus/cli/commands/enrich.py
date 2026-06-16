@@ -6,7 +6,7 @@ from typing import Annotated, Any
 
 import typer
 
-from argus.cli.output import print_agent_error, print_error, render_ioc_result, working
+from argus.cli.output import print_agent_error, print_error, render_ioc_result, status, thinking
 
 app = typer.Typer(help="Enrich indicators of compromise")
 
@@ -16,8 +16,12 @@ def _run(indicators: list[str], ioc_type: str, as_json: bool) -> None:
     from argus.agents.ioc_agent import IOCEnrichmentAgent
 
     async def _go() -> Any:
-        with working(f"Enriching {len(indicators)} indicator(s)...", enabled=not as_json):
-            return await IOCEnrichmentAgent().run(indicators=indicators, ioc_type=ioc_type)
+        progress = status if not as_json else None
+        with thinking(f"enriching {len(indicators)} indicator(s)", enabled=not as_json):
+            return await IOCEnrichmentAgent(progress=progress).run(
+                indicators=indicators,
+                ioc_type=ioc_type,
+            )
 
     try:
         result = asyncio.run(_go())

@@ -14,7 +14,8 @@ from argus.cli.output import (
     print_error,
     print_json,
     render_markdown,
-    working,
+    status,
+    thinking,
 )
 from argus.models.report import ReportClassification
 
@@ -64,8 +65,9 @@ def generate_report(
         raise typer.Exit(1)
 
     async def _go() -> Any:
-        with working(f"Generating {report_type} CTI report...", enabled=not json):
-            gen = ReportGenerator()
+        progress = status if not json else None
+        gen = ReportGenerator(progress=progress)
+        with thinking(f"generating {report_type.lower()} report", enabled=not json):
             return await gen.generate(
                 report_type=report_type.lower(),
                 scope=scope or "",
@@ -109,9 +111,9 @@ def generate_incident_report(
         raise typer.Exit(1)
 
     async def _go() -> Any:
-        description = f"Generating incident report from {len(alerts)} alert(s)..."
-        with working(description, enabled=not json):
-            return await ReportGenerator().generate_incident_from_alerts(
+        progress = status if not json else None
+        with thinking(f"generating incident report from {len(alerts)} alert(s)", enabled=not json):
+            return await ReportGenerator(progress=progress).generate_incident_from_alerts(
                 alerts=alerts,
                 context=context or "",
                 title=title,

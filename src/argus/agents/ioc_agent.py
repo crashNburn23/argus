@@ -56,7 +56,14 @@ class IOCEnrichmentAgent(BaseAgent):
     async def dispatch_tool(self, tool_name: str, tool_input: dict[str, Any]) -> str:
         return await dispatch_tool(tool_name, tool_input)
 
-    async def run(self, indicators: list[str], ioc_type: str = "auto") -> IOCEnrichmentResult:  # type: ignore[override]
+    async def run(  # type: ignore[override]
+        self,
+        indicators: list[str],
+        ioc_type: str = "auto",
+    ) -> IOCEnrichmentResult:
+        self._progress(
+            "ioc_enrichment: normalizing indicators and choosing enrichment sources"
+        )
         prompt = (
             f"Enrich the following indicators (type hint: {ioc_type}):\n"
             + "\n".join(f"- {ind}" for ind in indicators)

@@ -53,6 +53,7 @@ class ReportAgent(BaseAgent):
         return json.dumps({"error": f"Report agent has no tools: {tool_name}"})
 
     async def run(self, report: CTIReport, scope: str = "") -> CTIReport:  # type: ignore[override]
+        self._progress("report: organizing evidence into executive narrative")
         context_parts = [f"Report Type: {report.report_type.value.upper()}"]
         if scope:
             context_parts.append(f"Scope: {scope}")

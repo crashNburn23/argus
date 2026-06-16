@@ -6,6 +6,7 @@ import json
 import re
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any, TypeVar
 
 import structlog
@@ -23,15 +24,36 @@ MAX_LOOP_ITERATIONS = 10
 MAX_PARSE_RETRIES = 2
 
 T = TypeVar("T", bound=BaseModel)
+ProgressCallback = Callable[[str], None]
 
 
 class BaseAgent(ABC):
     name: str = "base"
 
-    def __init__(self) -> None:
+    def __init__(self, progress: ProgressCallback | None = None) -> None:
         settings = get_settings()
         self.client = create_llm_client(settings)
         self.model = settings.model
+        self.progress = progress
+
+    def _progress(self, message: str) -> None:
+        callback = getattr(self, "progress", None)
+        if callback is not None:
+            callback(message)
+
+    @staticmethod
+    def _summarize_tool_input(tool_input: dict[str, Any]) -> str:
+        if indicators := tool_input.get("indicators"):
+            return f"{len(indicators)} indicator(s)"
+        if cve_ids := tool_input.get("cve_ids"):
+            return ", ".join(str(cve) for cve in cve_ids[:3])
+        if query := tool_input.get("query"):
+            return str(query)[:80]
+        if alerts := tool_input.get("alerts"):
+            return f"{len(alerts)} alert(s)"
+        if keywords := tool_input.get("keywords"):
+            return str(keywords)[:80]
+        return "request parameters"
 
     @abstractmethod
     def get_system_prompt(self) -> str: ...
@@ -54,8 +76,11 @@ class BaseAgent(ABC):
         input_data = str(messages[0]["content"])[:4096] if messages else ""
 
         log.info("agent.start", agent=self.name, prompt_len=len(input_data))
+        self._progress(f"{self.name}: preparing model request")
 
         for iteration in range(MAX_LOOP_ITERATIONS):
+            if iteration > 0:
+                self._progress(f"{self.name}: synthesizing with tool results")
             kwargs: dict[str, Any] = {
                 "model": self.model,
                 "max_tokens": 8192,
@@ -79,6 +104,7 @@ class BaseAgent(ABC):
             )
 
             if response.stop_reason == "end_turn":
+                self._progress(f"{self.name}: finalizing structured analysis")
                 self._log_run(
                     input_data, response.content,
                     total_input_tokens, total_output_tokens,
@@ -106,10 +132,13 @@ class BaseAgent(ABC):
             for block in response.content:
                 if block.type == "tool_use":
                     log.info("agent.tool_call", agent=self.name, tool=block.name)
+                    detail = self._summarize_tool_input(dict(block.input))
+                    self._progress(f"{self.name}: querying {block.name} for {detail}")
                     try:
                         result_str = await self.dispatch_tool(block.name, dict(block.input))
                     except Exception as e:
                         result_str = json.dumps({"error": str(e)})
+                    self._progress(f"{self.name}: received {block.name} results")
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
@@ -145,6 +174,7 @@ class BaseAgent(ABC):
             # polluted mid-loop state left by the previous attempt's tool calls.
             content = await self._run_loop(list(messages))
             text = self._extract_text(content)
+            self._progress(f"{self.name}: validating response schema")
             try:
                 return self._parse_result(text, result_cls)
             except AgentError as exc:
@@ -155,6 +185,10 @@ class BaseAgent(ABC):
                         agent=self.name,
                         attempt=attempt + 1,
                         error=str(exc),
+                    )
+                    self._progress(
+                        f"{self.name}: response needs cleanup; retrying parse "
+                        f"({attempt + 1}/{max_parse_retries})"
                     )
                     messages.append({"role": "assistant", "content": content})
                     if exc.category == AgentFailureCategory.VALIDATION_ERROR:

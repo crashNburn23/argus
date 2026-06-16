@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 import typer
 
-from argus.cli.output import print_agent_error, print_error, render_triage_result, working
+from argus.cli.output import print_agent_error, print_error, render_triage_result, status, thinking
 
 app = typer.Typer(help="Triage security alerts")
 
@@ -35,8 +35,12 @@ def triage_alerts(
         raise typer.Exit(1)
 
     async def _go() -> Any:
-        with working(f"Triaging {len(alerts)} alert(s)...", enabled=not json):
-            return await TriageAgent().run(alerts=alerts, context=context or "")
+        progress = status if not json else None
+        with thinking(f"triaging {len(alerts)} alert(s)", enabled=not json):
+            return await TriageAgent(progress=progress).run(
+                alerts=alerts,
+                context=context or "",
+            )
 
     try:
         result = asyncio.run(_go())
@@ -59,8 +63,12 @@ def triage_single(
     alert = {"alert_id": alert_id, "raw_log": raw_log}
 
     async def _go() -> Any:
-        with working("Triaging alert...", enabled=not json):
-            return await TriageAgent().run(alerts=[alert], context=context or "")
+        progress = status if not json else None
+        with thinking("triaging alert", enabled=not json):
+            return await TriageAgent(progress=progress).run(
+                alerts=[alert],
+                context=context or "",
+            )
 
     try:
         result = asyncio.run(_go())

@@ -14,6 +14,11 @@ class MITRETechnique(BaseModel):
     data_sources: list[str] = []
 
 
+class Campaign(BaseModel):
+    name: str
+    description: str = ""
+
+
 class ThreatActor(BaseModel):
     name: str
     aliases: list[str] = []
@@ -22,10 +27,10 @@ class ThreatActor(BaseModel):
     sophistication: str = ""
     resource_level: str = ""
     primary_motivation: str = ""
-    suspected_attribution: str = ""
+    suspected_attribution: list[str] = []
     mitre_group_id: str | None = None
     techniques: list[MITRETechnique] = []
-    campaigns: list[str] = []
+    campaigns: list[Campaign] = []
     associated_malware: list[str] = []
     target_sectors: list[str] = []
     target_countries: list[str] = []

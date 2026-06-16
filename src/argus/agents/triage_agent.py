@@ -61,7 +61,12 @@ class TriageAgent(BaseAgent):
     async def dispatch_tool(self, tool_name: str, tool_input: dict[str, Any]) -> str:
         return await dispatch_tool(tool_name, tool_input)
 
-    async def run(self, alerts: list[dict[str, Any]], context: str = "") -> AlertTriageResult:  # type: ignore[override]
+    async def run(  # type: ignore[override]
+        self,
+        alerts: list[dict[str, Any]],
+        context: str = "",
+    ) -> AlertTriageResult:
+        self._progress("triage: extracting alert evidence and candidate IOCs")
         alerts_json = json.dumps(alerts, indent=2)
         ctx = f"\nAdditional context: {context}" if context else ""
         prompt = f"Triage the following alerts:{ctx}\n\n{alerts_json}"

@@ -29,12 +29,12 @@ Return your analysis as a JSON object matching the ThreatActorResearchResult sch
       "sophistication": "none|minimal|intermediate|advanced|expert|innovator|strategic",
       "resource_level": "individual|club|contest|team|organization|government",
       "primary_motivation": "...",
-      "suspected_attribution": "...",
+      "suspected_attribution": ["..."],
       "mitre_group_id": "G0001",
       "techniques": [
         {"technique_id": "T1566", "technique_name": "...", "tactic": "...", "description": "..."}
       ],
-      "campaigns": [],
+      "campaigns": [{"name": "...", "description": "..."}],
       "associated_malware": [],
       "target_sectors": [],
       "target_countries": [],
@@ -67,6 +67,7 @@ class ThreatActorAgent(BaseAgent):
         include_ttps: bool = True,
         include_iocs: bool = True,
     ) -> ThreatActorResearchResult:
+        self._progress("threat_actor: scoping actor aliases, campaigns, and TTPs")
         extras = []
         if include_ttps:
             extras.append("Include full TTP mapping to MITRE ATT&CK.")
