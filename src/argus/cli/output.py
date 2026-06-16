@@ -361,7 +361,6 @@ class _ThinkingIndicator:
         if self._live is not None:
             self._live.stop()
         _active_thinking_indicator = self._previous
-        console.print(self._render(final=True))
 
     def update(self, message: str) -> None:
         with self._lock:
@@ -378,15 +377,13 @@ class _ThinkingIndicator:
         if self._live is not None:
             self._live.update(self._render())
 
-    def _render(self, *, final: bool = False) -> Text:
+    def _render(self) -> Text:
         with self._lock:
             frame = self._frames[self._frame]
             message = self._message
         text = Text()
         text.append("⟐ ", style="cp.magenta")
-        text.append("◉" if final else frame, style="cp.cyan")
-        text.append(" ◉ ", style="cp.magenta")
-        text.append("◉" if final else frame, style="cp.cyan")
+        text.append(frame, style="cp.cyan")
         text.append(" ⟐", style="cp.magenta")
         text.append(f"  {message}")
         return text

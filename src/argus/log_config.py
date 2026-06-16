@@ -8,16 +8,18 @@ import structlog
 
 from argus.config.settings import get_settings
 
+_verbose = True
+
 
 def configure_logging() -> None:
     settings = get_settings()
-    level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    configured_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    level = configured_level if _verbose else logging.CRITICAL
 
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
             structlog.stdlib.add_log_level,
-            structlog.stdlib.add_logger_name,
             structlog.dev.set_exc_info,
             structlog.processors.TimeStamper(fmt="iso"),
             (
@@ -30,3 +32,13 @@ def configure_logging() -> None:
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
     )
+
+
+def set_verbose(enabled: bool) -> None:
+    global _verbose
+    _verbose = enabled
+    configure_logging()
+
+
+def get_verbose() -> bool:
+    return _verbose

@@ -489,7 +489,7 @@ async def _handle_slash(
 
     elif verb == "/status":
         from argus.config.settings import get_settings
-        from argus.logging import get_verbose
+        from argus.log_config import get_verbose
 
         settings = get_settings()
         turns = getattr(orchestrator, "conversation_turns", 0)
@@ -501,7 +501,7 @@ async def _handle_slash(
         )
 
     elif verb == "/verbose":
-        from argus.logging import get_verbose, set_verbose
+        from argus.log_config import get_verbose, set_verbose
 
         if args:
             value = args[0].lower()
@@ -774,7 +774,7 @@ def run_interactive() -> None:
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     """Start an interactive session when no subcommand is provided."""
-    from argus.logging import configure_logging
+    from argus.log_config import configure_logging
     configure_logging()
     if ctx.invoked_subcommand is None:
         run_interactive()
