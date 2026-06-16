@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 from typer.testing import CliRunner
 
@@ -34,7 +34,7 @@ def test_interactive_session_ignores_empty_input() -> None:
 
     assert result.exit_code == 0
     orchestrator.run.assert_not_awaited()
-    constructor.assert_called_once_with(persistent=True)
+    constructor.assert_called_once_with(persistent=True, progress=ANY)
 
 
 def test_interactive_doctor_command(monkeypatch) -> None:
