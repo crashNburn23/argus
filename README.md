@@ -69,7 +69,7 @@ slash commands. Arrow keys scroll history. Bottom bar shows active model and the
 /triage  <raw log>               Triage a raw alert
 
 /model   [name]                  Show or switch model
-/theme   [name]                  Switch colour theme (cyberpunk/analyst/contrast/mono)
+/theme   [name]                  Switch colour theme (analyst/contrast/mono/midnight/nord/ember)
 /save    [title]                 Save this conversation
 /resume  <session-id>            Resume a saved conversation
 /sessions                        List saved conversations

@@ -43,24 +43,10 @@ from argus.storage.sessions import (
 )
 
 # ---------------------------------------------------------------------------
-# prompt_toolkit cyberpunk style
+# prompt_toolkit per-theme styles
 # ---------------------------------------------------------------------------
 
 _PT_STYLES: dict[str, dict[str, str]] = {
-    "cyberpunk": {
-        "argus-name":  "#bb44bb bold",
-        "argus-arrow": "#00bbbb bold",
-        "completion-menu":                    "bg:#0a0018 #00bbbb",
-        "completion-menu.completion":         "bg:#0a0018 #00bbbb",
-        "completion-menu.completion.current": "bg:#6622bb #ffffff bold",
-        "completion-menu.meta":               "bg:#0a0018 #6622bb",
-        "completion-menu.meta.current":       "bg:#6622bb #cccccc",
-        "completion-menu.multi-column-meta":  "bg:#0a0018 #00bbbb",
-        "scrollbar.background": "bg:#0a0018",
-        "scrollbar.button":     "bg:#6622bb",
-        "auto-suggest":         "#3d3355",
-        "bottom-toolbar":       "bg:#0a0018 #006677",
-    },
     "analyst": {
         "argus-name":  "#6677aa bold",
         "argus-arrow": "#4499cc bold",
@@ -103,12 +89,54 @@ _PT_STYLES: dict[str, dict[str, str]] = {
         "auto-suggest":         "italic",
         "bottom-toolbar":       "reverse",
     },
+    "midnight": {
+        "argus-name":  "#a070a0 bold",
+        "argus-arrow": "#7ca2d6 bold",
+        "completion-menu":                    "bg:#0d1a2e #7ca2d6",
+        "completion-menu.completion":         "bg:#0d1a2e #7ca2d6",
+        "completion-menu.completion.current": "bg:#2a3a5a #ffffff bold",
+        "completion-menu.meta":               "bg:#0d1a2e #6b6aad",
+        "completion-menu.meta.current":       "bg:#2a3a5a #c0c0e0",
+        "completion-menu.multi-column-meta":  "bg:#0d1a2e #7ca2d6",
+        "scrollbar.background": "bg:#0d1a2e",
+        "scrollbar.button":     "bg:#2a3a5a",
+        "auto-suggest":         "#3a4a5e",
+        "bottom-toolbar":       "bg:#0d1a2e #2a3a5a",
+    },
+    "nord": {
+        "argus-name":  "#b48ead bold",
+        "argus-arrow": "#88c0d0 bold",
+        "completion-menu":                    "bg:#2e3440 #88c0d0",
+        "completion-menu.completion":         "bg:#2e3440 #88c0d0",
+        "completion-menu.completion.current": "bg:#4c566a #eceff4 bold",
+        "completion-menu.meta":               "bg:#2e3440 #81a1c1",
+        "completion-menu.meta.current":       "bg:#4c566a #d8dee9",
+        "completion-menu.multi-column-meta":  "bg:#2e3440 #88c0d0",
+        "scrollbar.background": "bg:#2e3440",
+        "scrollbar.button":     "bg:#4c566a",
+        "auto-suggest":         "#4c566a",
+        "bottom-toolbar":       "bg:#2e3440 #3b4252",
+    },
+    "ember": {
+        "argus-name":  "#d4714f bold",
+        "argus-arrow": "#e8a26b bold",
+        "completion-menu":                    "bg:#1a0d05 #e8a26b",
+        "completion-menu.completion":         "bg:#1a0d05 #e8a26b",
+        "completion-menu.completion.current": "bg:#6b4422 #ffffff bold",
+        "completion-menu.meta":               "bg:#1a0d05 #996644",
+        "completion-menu.meta.current":       "bg:#6b4422 #e0c8a0",
+        "completion-menu.multi-column-meta":  "bg:#1a0d05 #e8a26b",
+        "scrollbar.background": "bg:#1a0d05",
+        "scrollbar.button":     "bg:#6b4422",
+        "auto-suggest":         "#5a3a22",
+        "bottom-toolbar":       "bg:#1a0d05 #6b4422",
+    },
 }
 
 
 def _pt_style() -> Style:
     from argus.cli.output import get_theme
-    return Style.from_dict(_PT_STYLES.get(get_theme(), _PT_STYLES["cyberpunk"]))
+    return Style.from_dict(_PT_STYLES.get(get_theme(), _PT_STYLES["analyst"]))
 
 _PROMPT_TOKENS = FormattedText([
     ("class:argus-name",  "argus"),
@@ -434,7 +462,7 @@ async def _handle_slash(
                 set_theme(name)
                 if pt_session is not None:
                     pt_session.style = Style.from_dict(
-                        _PT_STYLES.get(name, _PT_STYLES["cyberpunk"])
+                        _PT_STYLES.get(name, _PT_STYLES["analyst"])
                     )
                 console.print(f"[cp.green]✓[/cp.green] theme: [cp.cyan]{name}[/cp.cyan]")
 

@@ -20,28 +20,6 @@ from rich.theme import Theme
 # ---------------------------------------------------------------------------
 
 THEMES: dict[str, dict[str, str]] = {
-    "cyberpunk": {
-        "cp.cyan":    "#00bbbb bold",
-        "cp.magenta": "#bb44bb bold",
-        "cp.green":   "#33aa22 bold",
-        "cp.amber":   "#cc8800",
-        "cp.red":     "#cc2244 bold",
-        "cp.purple":  "#6622bb",
-        "cp.dim":     "dim #554477",
-        "cp.border":  "#007788",
-        "verdict.malicious":  "#cc2244 bold",
-        "verdict.suspicious": "#cc8800",
-        "verdict.benign":     "#33aa22",
-        "verdict.unknown":    "dim #6622bb",
-        "sev.critical": "#cc2244 bold",
-        "sev.high":     "#cc2244",
-        "sev.medium":   "#cc8800",
-        "sev.low":      "#00bbbb",
-        "sev.none":     "dim",
-        "triage.tp": "#cc2244 bold",
-        "triage.fp": "#33aa22",
-        "triage.ni": "#cc8800",
-    },
     "analyst": {
         "cp.cyan":    "#4499cc bold",
         "cp.magenta": "#6677aa bold",
@@ -108,13 +86,81 @@ THEMES: dict[str, dict[str, str]] = {
         "triage.fp": "bold",
         "triage.ni": "bold italic",
     },
+    "midnight": {
+        "cp.cyan":    "#7ca2d6 bold",
+        "cp.magenta": "#a070a0 bold",
+        "cp.green":   "#5aad7e bold",
+        "cp.amber":   "#c49a3c",
+        "cp.red":     "#c26a6a bold",
+        "cp.purple":  "#6b6aad",
+        "cp.dim":     "dim #3a4a5e",
+        "cp.border":  "#2a3a5a",
+        "verdict.malicious":  "#c26a6a bold",
+        "verdict.suspicious": "#c49a3c",
+        "verdict.benign":     "#5aad7e",
+        "verdict.unknown":    "dim #6b6aad",
+        "sev.critical": "#c26a6a bold",
+        "sev.high":     "#c26a6a",
+        "sev.medium":   "#c49a3c",
+        "sev.low":      "#7ca2d6",
+        "sev.none":     "dim",
+        "triage.tp": "#c26a6a bold",
+        "triage.fp": "#5aad7e",
+        "triage.ni": "#c49a3c",
+    },
+    "nord": {
+        "cp.cyan":    "#88c0d0 bold",
+        "cp.magenta": "#b48ead bold",
+        "cp.green":   "#a3be8c bold",
+        "cp.amber":   "#ebcb8b",
+        "cp.red":     "#bf616a bold",
+        "cp.purple":  "#81a1c1",
+        "cp.dim":     "dim #4c566a",
+        "cp.border":  "#3b4252",
+        "verdict.malicious":  "#bf616a bold",
+        "verdict.suspicious": "#ebcb8b",
+        "verdict.benign":     "#a3be8c",
+        "verdict.unknown":    "dim #81a1c1",
+        "sev.critical": "#bf616a bold",
+        "sev.high":     "#bf616a",
+        "sev.medium":   "#ebcb8b",
+        "sev.low":      "#88c0d0",
+        "sev.none":     "dim",
+        "triage.tp": "#bf616a bold",
+        "triage.fp": "#a3be8c",
+        "triage.ni": "#ebcb8b",
+    },
+    "ember": {
+        "cp.cyan":    "#e8a26b bold",
+        "cp.magenta": "#d4714f bold",
+        "cp.green":   "#7daa6b bold",
+        "cp.amber":   "#cc8833",
+        "cp.red":     "#cc4433 bold",
+        "cp.purple":  "#996644",
+        "cp.dim":     "dim #5a3a22",
+        "cp.border":  "#6b4422",
+        "verdict.malicious":  "#cc4433 bold",
+        "verdict.suspicious": "#cc8833",
+        "verdict.benign":     "#7daa6b",
+        "verdict.unknown":    "dim #996644",
+        "sev.critical": "#cc4433 bold",
+        "sev.high":     "#cc4433",
+        "sev.medium":   "#cc8833",
+        "sev.low":      "#e8a26b",
+        "sev.none":     "dim",
+        "triage.tp": "#cc4433 bold",
+        "triage.fp": "#7daa6b",
+        "triage.ni": "#cc8833",
+    },
 }
 
 THEME_DESCRIPTIONS: dict[str, str] = {
-    "cyberpunk": "Neon teal/magenta on dark — default",
-    "analyst":   "Muted steel blues — professional",
-    "contrast":  "Full ANSI saturation — high visibility",
-    "mono":      "Bold and dim only — no color",
+    "analyst":  "Muted steel blues — professional (default)",
+    "contrast": "Full ANSI saturation — high visibility",
+    "mono":     "Bold and dim only — no color",
+    "midnight": "Deep navy and periwinkle — dark IDE feel",
+    "nord":     "Arctic blues and aurora — Nord palette",
+    "ember":    "Warm amber and flame — firelight on dark",
 }
 
 _CONFIG_FILE = Path.home() / ".argus_config.json"
@@ -123,10 +169,10 @@ _CONFIG_FILE = Path.home() / ".argus_config.json"
 def _load_saved_theme() -> str:
     try:
         data = json.loads(_CONFIG_FILE.read_text())
-        name = data.get("theme", "cyberpunk")
-        return name if name in THEMES else "cyberpunk"
+        name = data.get("theme", "analyst")
+        return name if name in THEMES else "analyst"
     except Exception:
-        return "cyberpunk"
+        return "analyst"
 
 
 def _save_theme(name: str) -> None:
