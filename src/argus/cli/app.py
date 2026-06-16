@@ -184,6 +184,7 @@ _SLASH_COMMANDS = [
     ("/theme",    "[name|list]"),
     ("/doctor",   ""),
     ("/status",   ""),
+    ("/verbose",  "[on|off]"),
     ("/clear",    ""),
     ("/new",      ""),
     ("/cache",    ""),
@@ -259,6 +260,12 @@ class _ArgusCompleter(Completer):
                 if sub.startswith(partial):
                     yield Completion(sub[len(partial):], display=sub)
 
+        # /verbose → complete toggle values
+        elif verb == "/verbose":
+            for value in ["on", "off"]:
+                if value.startswith(partial):
+                    yield Completion(value[len(partial):], display=value)
+
         # /resume → complete session IDs
         elif verb == "/resume":
             try:
@@ -288,6 +295,7 @@ _SLASH_HELP = """
   [cp.cyan]/theme[/cp.cyan]   [cp.dim]<name>[/cp.dim]            Switch theme and re-render history
   [cp.cyan]/doctor[/cp.cyan]                      Check model, storage, and source readiness
   [cp.cyan]/status[/cp.cyan]                      Show active model and conversation state
+  [cp.cyan]/verbose[/cp.cyan] [cp.dim][on|off][/cp.dim]             Toggle runtime log messages
   [cp.cyan]/clear[/cp.cyan] [cp.dim]or[/cp.dim] [cp.cyan]/new[/cp.cyan]   Start a fresh conversation
   [cp.cyan]/cache[/cp.cyan]                       Cache statistics
   [cp.cyan]/sessions[/cp.cyan]                    List saved sessions
@@ -481,12 +489,38 @@ async def _handle_slash(
 
     elif verb == "/status":
         from argus.config.settings import get_settings
+        from argus.logging import get_verbose
 
         settings = get_settings()
         turns = getattr(orchestrator, "conversation_turns", 0)
+        verbose = "on" if get_verbose() else "off"
         console.print(
             f"Model: [cp.cyan]{settings.model_provider} / {settings.model}[/cp.cyan]\n"
-            f"Conversation turns: [cp.cyan]{turns}[/cp.cyan]"
+            f"Conversation turns: [cp.cyan]{turns}[/cp.cyan]\n"
+            f"Verbose logs: [cp.cyan]{verbose}[/cp.cyan]"
+        )
+
+    elif verb == "/verbose":
+        from argus.logging import get_verbose, set_verbose
+
+        if args:
+            value = args[0].lower()
+            if value not in ("on", "off"):
+                console.print("[cp.amber]usage:[/cp.amber] /verbose [on|off]")
+                return True
+            enabled = value == "on"
+        else:
+            enabled = not get_verbose()
+        set_verbose(enabled)
+        state = "on" if enabled else "off"
+        detail = (
+            "runtime log messages enabled"
+            if enabled
+            else "runtime log messages hidden; agent status updates remain visible"
+        )
+        console.print(
+            f"[cp.green]✓[/cp.green] verbose: [cp.cyan]{state}[/cp.cyan]  "
+            f"[cp.dim]{detail}[/cp.dim]"
         )
 
     elif verb in ("/clear", "/new"):
@@ -740,6 +774,8 @@ def run_interactive() -> None:
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     """Start an interactive session when no subcommand is provided."""
+    from argus.logging import configure_logging
+    configure_logging()
     if ctx.invoked_subcommand is None:
         run_interactive()
 

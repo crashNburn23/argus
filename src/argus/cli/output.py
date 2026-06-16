@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import threading
-import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -339,7 +338,7 @@ class _ThinkingIndicator:
         self._live: Live | None = None
         self._thread: threading.Thread | None = None
 
-    def __enter__(self) -> "_ThinkingIndicator":
+    def __enter__(self) -> _ThinkingIndicator:
         global _active_thinking_indicator
         self._previous = _active_thinking_indicator
         _active_thinking_indicator = self
@@ -362,6 +361,7 @@ class _ThinkingIndicator:
         if self._live is not None:
             self._live.stop()
         _active_thinking_indicator = self._previous
+        console.print(self._render(final=True))
 
     def update(self, message: str) -> None:
         with self._lock:
@@ -378,15 +378,15 @@ class _ThinkingIndicator:
         if self._live is not None:
             self._live.update(self._render())
 
-    def _render(self) -> Text:
+    def _render(self, *, final: bool = False) -> Text:
         with self._lock:
             frame = self._frames[self._frame]
             message = self._message
         text = Text()
         text.append("⟐ ", style="cp.magenta")
-        text.append(frame, style="cp.cyan")
+        text.append("◉" if final else frame, style="cp.cyan")
         text.append(" ◉ ", style="cp.magenta")
-        text.append(frame, style="cp.cyan")
+        text.append("◉" if final else frame, style="cp.cyan")
         text.append(" ⟐", style="cp.magenta")
         text.append(f"  {message}")
         return text
