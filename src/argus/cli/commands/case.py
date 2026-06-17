@@ -294,10 +294,13 @@ def extract_case_artifacts(
 
         relationships = list(case.relationships)
 
+        import json as _json
+
+        from argus.ingestion.json_ingestor import ingest_json_alerts, is_json_alert_array
+        from argus.ingestion.stix_ingestor import ingest_stix_bundle, is_stix_bundle
+
         for artifact in artifacts:
-            from argus.ingestion.stix_ingestor import ingest_stix_bundle, is_stix_bundle
             if is_stix_bundle(artifact.raw_text):
-                import json as _json
                 stix_result = ingest_stix_bundle(_json.loads(artifact.raw_text))
                 for obs in stix_result.observables:
                     key = (obs.observable_type, obs.canonical_value or obs.value)
@@ -310,6 +313,20 @@ def extract_case_artifacts(
                     evidence_items.append(ev)
                     evidence_count += 1
                 relationships.extend(stix_result.relationships)
+                continue
+
+            if is_json_alert_array(artifact.raw_text):
+                json_result = ingest_json_alerts(_json.loads(artifact.raw_text))
+                for obs in json_result.observables:
+                    key = (obs.observable_type, obs.canonical_value or obs.value)
+                    if key not in observable_index:
+                        observables.append(obs)
+                        observable_index[key] = obs
+                        extracted_count += 1
+                for ev in json_result.evidence:
+                    ev = ev.model_copy(update={"artifact_id": artifact.artifact_id})
+                    evidence_items.append(ev)
+                    evidence_count += 1
                 continue
 
             for extracted in extract_observables(artifact.raw_text):
@@ -801,6 +818,9 @@ def _summarize_enrichment(
     return f"{source}: enrichment retrieved for {value}", 0.5
 
 
+_VALID_PIVOT_SOURCES = frozenset({"passive_dns", "ssl_cert", "whois"})
+
+
 @app.command("pivot")
 def pivot_case_observables(
     case_id: Annotated[str, typer.Argument(help="Case ID")],
@@ -814,9 +834,31 @@ def pivot_case_observables(
     ] = None,
     no_certs: Annotated[bool, typer.Option("--no-certs", help="Skip cert lookups")] = False,
     no_whois: Annotated[bool, typer.Option("--no-whois", help="Skip WHOIS lookups")] = False,
+    sources: Annotated[
+        str | None,
+        typer.Option(
+            "--sources",
+            help="Comma-separated pivot sources to run: passive_dns,ssl_cert,whois",
+        ),
+    ] = None,
     json: Annotated[bool, typer.Option("--json", "-j", help="Output as JSON")] = False,
 ) -> None:
     """Pivot case observables via passive DNS, certificates, and WHOIS."""
+    allowed_pivot_sources: set[str] | None = None
+    if sources is not None:
+        allowed_pivot_sources = {s.strip().lower() for s in sources.split(",") if s.strip()}
+        invalid = allowed_pivot_sources - _VALID_PIVOT_SOURCES
+        if invalid:
+            print_error(
+                f"Unknown pivot source(s): {', '.join(sorted(invalid))}. "
+                f"Valid: {', '.join(sorted(_VALID_PIVOT_SOURCES))}"
+            )
+            raise typer.Exit(1)
+    if no_certs:
+        allowed_pivot_sources = (allowed_pivot_sources or _VALID_PIVOT_SOURCES) - {"ssl_cert"}
+    if no_whois:
+        allowed_pivot_sources = (allowed_pivot_sources or _VALID_PIVOT_SOURCES) - {"whois"}
+
     try:
         case = CaseStore().get(case_id)
     except CaseNotFoundError:
@@ -860,8 +902,7 @@ def pivot_case_observables(
             observables,
             existing_pivots,
             existing_index,
-            include_certs=not no_certs,
-            include_whois=not no_whois,
+            allowed_sources=allowed_pivot_sources,
         )
     )
 
@@ -924,12 +965,15 @@ def pivot_case_observables(
             console.print(f"  [cp.red]✗[/cp.red] {src} / {obs_id}: {ev.summary}")
 
 
+def _pivot_source_allowed(source: str, allowed: set[str] | None) -> bool:
+    return allowed is None or source in allowed
+
+
 async def _run_pivots(
     observables: list[Observable],
     existing_pivots: set[tuple[str, str]],
     existing_index: dict[tuple[ObservableType, str], Observable],
-    include_certs: bool,
-    include_whois: bool,
+    allowed_sources: set[str] | None = None,
 ) -> tuple[list[Observable], list[EvidenceItem], list[Relationship]]:
     from argus.config.settings import get_settings
 
@@ -943,15 +987,25 @@ async def _run_pivots(
         obs_type = obs.observable_type
         itype = "ip" if obs_type == ObservableType.IP else "domain"
 
-        if vt_key and ("passive_dns", oid) not in existing_pivots:
+        if (
+            vt_key
+            and _pivot_source_allowed("passive_dns", allowed_sources)
+            and ("passive_dns", oid) not in existing_pivots
+        ):
             from argus.tools.passive_dns import passive_dns_lookup
             all_tasks.append((obs, "passive_dns", passive_dns_lookup(value, itype)))
 
         if obs_type == ObservableType.DOMAIN:
-            if include_certs and ("ssl_cert", oid) not in existing_pivots:
+            if (
+                _pivot_source_allowed("ssl_cert", allowed_sources)
+                and ("ssl_cert", oid) not in existing_pivots
+            ):
                 from argus.tools.certs import ssl_cert_lookup
                 all_tasks.append((obs, "ssl_cert", ssl_cert_lookup(value, "domain")))
-            if include_whois and ("whois", oid) not in existing_pivots:
+            if (
+                _pivot_source_allowed("whois", allowed_sources)
+                and ("whois", oid) not in existing_pivots
+            ):
                 from argus.tools.whois import whois_lookup
                 all_tasks.append((obs, "whois", whois_lookup(value)))
 
