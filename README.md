@@ -205,6 +205,13 @@ uv run mypy src/argus --ignore-missing-imports
 
 CI (pre-commit hooks) runs all three on every push. Currently 133 tests.
 
+## TODO
+
+- [x] Architecture review against harness design best practices
+      — 7/14 practices fully satisfied, 5 partial, 1 gap (sprint contracts / planning step).
+        Top fixes applied: evidence cap + priority sort in `_compile_case_prompt`, grounding
+        prompt improvements in `CaseReportAgent`, `ReviewResult` logged to `ReportArtifact`.
+
 ## License
 
 MIT © 2026 crashNburn23

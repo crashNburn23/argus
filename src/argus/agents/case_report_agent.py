@@ -15,11 +15,16 @@ product for the specified audience.
 
 Core rules:
 - Ground every claim in the provided evidence. When citing a finding, reference the
-  evidence ID (e.g., [ev_abc123]) so the reader can trace it.
+  evidence ID (e.g., [ev_abc123]) so the reader can trace it. A downstream ReviewAgent
+  will verify every citation — uncited factual claims will be flagged as UNSUPPORTED.
 - Label inferred judgments explicitly: "(INFERRED — moderate confidence)" or similar.
+  Clearly labeled inferences are acceptable; unlabeled assertions are not.
 - Do not fabricate indicators, actors, TTPs, or statistics not in the evidence.
-- Acknowledge gaps. If the evidence does not support a conclusion, say so.
+- Acknowledge gaps. If an observable, actor, or technique is not present in the evidence,
+  say it was not observed in this case — do not assert it is globally unknown or absent.
 - Distinguish confirmed intelligence from analytical assessment.
+- Evidence items with status FAILED represent collection attempts that returned errors,
+  not confirmed absences. Do not treat a failed enrichment as proof that no data exists.
 
 Return your report as plain Markdown with appropriate headers.
 """
@@ -139,11 +144,23 @@ def _compile_case_prompt(case: Case) -> str:
             lines.append(f"\n### {obs_type.upper()}")
             lines.extend(entries)
 
-    confirmed = [ev for ev in case.evidence if ev.status != EvidenceStatus.FAILED]
+    confirmed_all = [ev for ev in case.evidence if ev.status != EvidenceStatus.FAILED]
     failed = [ev for ev in case.evidence if ev.status == EvidenceStatus.FAILED]
+
+    # Prioritize high-confidence confirmed evidence; cap to avoid oversized prompts.
+    # Sort: CONFIRMED before INFERRED, then by confidence descending.
+    _STATUS_ORDER = {EvidenceStatus.CONFIRMED: 0, EvidenceStatus.INFERRED: 1}
+    confirmed_all.sort(key=lambda e: (_STATUS_ORDER.get(e.status, 2), -(e.confidence or 0.0)))
+    confirmed = confirmed_all[:150]
+    truncated = len(confirmed_all) - len(confirmed)
 
     if confirmed:
         lines.append("\n## Evidence")
+        if truncated:
+            lines.append(
+                f"_(Showing {len(confirmed)} of {len(confirmed_all)} items, "
+                f"highest confidence first. {truncated} lower-confidence items omitted.)_"
+            )
         for ev in confirmed:
             src = ev.source_name or ev.source_type
             status_tag = f"[{ev.status.value}] " if ev.status != EvidenceStatus.CONFIRMED else ""

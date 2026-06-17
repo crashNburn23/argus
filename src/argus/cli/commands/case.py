@@ -1582,6 +1582,7 @@ def analyze_case(
         print_agent_error(exc)
         raise typer.Exit(1)
 
+    review_metadata: dict[str, Any] = {}
     if review:
         from argus.agents.review_agent import ReviewAgent
         try:
@@ -1589,6 +1590,22 @@ def analyze_case(
                 review_result = asyncio.run(
                     ReviewAgent(progress=status).review(content, case)
                 )
+            review_metadata = {
+                "review_passed": review_result.passed,
+                "grounded_claim_count": review_result.grounded_claim_count,
+                "inferred_claim_count": review_result.inferred_claim_count,
+                "ungrounded_claim_count": review_result.ungrounded_claim_count,
+                "review_summary": review_result.summary,
+                "findings": [
+                    {
+                        "claim": f.claim,
+                        "issue": f.issue,
+                        "severity": f.severity,
+                        "evidence_id": f.evidence_id,
+                    }
+                    for f in review_result.findings
+                ],
+            }
             if review_result.passed:
                 console.print(
                     f"[cp.green]✓ review passed[/cp.green] — "
@@ -1617,6 +1634,7 @@ def analyze_case(
         classification=case.classification,
         evidence_ids=[ev.evidence_id for ev in case.evidence],
         content=content,
+        metadata=review_metadata,
     )
 
     if save:
