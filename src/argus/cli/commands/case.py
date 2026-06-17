@@ -296,6 +296,7 @@ def extract_case_artifacts(
 
         import json as _json
 
+        from argus.ingestion.csv_ingestor import ingest_csv, is_csv
         from argus.ingestion.json_ingestor import ingest_json_alerts, is_json_alert_array
         from argus.ingestion.stix_ingestor import ingest_stix_bundle, is_stix_bundle
 
@@ -324,6 +325,20 @@ def extract_case_artifacts(
                         observable_index[key] = obs
                         extracted_count += 1
                 for ev in json_result.evidence:
+                    ev = ev.model_copy(update={"artifact_id": artifact.artifact_id})
+                    evidence_items.append(ev)
+                    evidence_count += 1
+                continue
+
+            if is_csv(artifact.raw_text):
+                csv_result = ingest_csv(artifact.raw_text)
+                for obs in csv_result.observables:
+                    key = (obs.observable_type, obs.canonical_value or obs.value)
+                    if key not in observable_index:
+                        observables.append(obs)
+                        observable_index[key] = obs
+                        extracted_count += 1
+                for ev in csv_result.evidence:
                     ev = ev.model_copy(update={"artifact_id": artifact.artifact_id})
                     evidence_items.append(ev)
                     evidence_count += 1
