@@ -483,6 +483,64 @@ def test_case_pivot_skips_already_pivoted_observables(monkeypatch) -> None:
     assert second_whois == first_whois
 
 
+def test_case_analyze_generates_llm_report_and_stores_artifact() -> None:
+    runner = CliRunner()
+
+    created = runner.invoke(
+        app, ["case", "create", "LLM report test", "--description", "Test case", "--json"]
+    )
+    case_id = json.loads(created.stdout)["case_id"]
+    runner.invoke(
+        app,
+        ["case", "artifact", case_id, "--text", "CVE-2021-44228 198.51.100.10", "--type", "report"],
+    )
+    runner.invoke(app, ["case", "extract", case_id])
+
+    fake_report = "# CTI Report\n\nFindings grounded in evidence [ev_xxx]."
+
+    with patch(
+        "argus.agents.case_report_agent.CaseReportAgent.generate",
+        new_callable=AsyncMock,
+        return_value=fake_report,
+    ):
+        result = runner.invoke(
+            app, ["case", "analyze", case_id, "--audience", "cti", "--no-save"]
+        )
+
+    assert result.exit_code == 0, result.output or result.stderr
+    assert "CTI Report" in result.output or "Findings" in result.output
+
+
+def test_case_analyze_stores_report_artifact_on_case() -> None:
+    runner = CliRunner()
+
+    created = runner.invoke(app, ["case", "create", "Store report", "--json"])
+    case_id = json.loads(created.stdout)["case_id"]
+    runner.invoke(
+        app, ["case", "artifact", case_id, "--text", "198.51.100.10", "--type", "report"]
+    )
+    runner.invoke(app, ["case", "extract", case_id])
+
+    with patch(
+        "argus.agents.case_report_agent.CaseReportAgent.generate",
+        new_callable=AsyncMock,
+        return_value="# SOC Report\n\nDetection guidance.",
+    ):
+        result = runner.invoke(
+            app, ["case", "analyze", case_id, "--audience", "soc", "--save", "--json"]
+        )
+
+    assert result.exit_code == 0, result.output or result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["report_type"] == "soc"
+    assert "SOC Report" in payload["content"]
+
+    shown = runner.invoke(app, ["case", "show", case_id, "--json"])
+    shown_payload = json.loads(shown.stdout)
+    assert len(shown_payload["reports"]) == 1
+    assert shown_payload["reports"][0]["report_type"] == "soc"
+
+
 def test_case_report_json_output_stores_report_artifact() -> None:
     runner = CliRunner()
 

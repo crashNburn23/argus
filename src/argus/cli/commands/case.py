@@ -1185,6 +1185,78 @@ def _render_case_report(
     return "\n".join(lines)
 
 
+@app.command("analyze")
+def analyze_case(
+    case_id: Annotated[str, typer.Argument(help="Case ID")],
+    audience: Annotated[
+        str,
+        typer.Option(
+            "--audience",
+            "-a",
+            help="Target audience: cti, soc, vm, ir, exec, awareness, redteam",
+        ),
+    ] = "cti",
+    save: Annotated[bool, typer.Option("--save/--no-save", help="Attach report to case")] = True,
+    json: Annotated[
+        bool, typer.Option("--json", "-j", help="Output report artifact as JSON")
+    ] = False,
+) -> None:
+    """Generate an LLM-synthesized audience-specific intelligence product from a case."""
+    from argus.agents.case_report_agent import CaseReportAgent
+    from argus.cli.output import render_markdown, status, thinking
+
+    valid_audiences = CaseReportAgent.AUDIENCES
+    if audience not in valid_audiences:
+        print_error(f"Unknown audience {audience!r}. Valid: {', '.join(valid_audiences)}")
+        raise typer.Exit(1)
+
+    try:
+        case = CaseStore().get(case_id)
+    except CaseNotFoundError:
+        print_error(f"Case not found: {case_id}")
+        raise typer.Exit(1)
+    except CaseStoreError as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+    if not case.evidence:
+        print_error("No evidence in case — run 'case extract' and 'case enrich' first")
+        raise typer.Exit(1)
+
+    try:
+        with thinking(f"synthesizing {audience} report for {case.title}"):
+            agent = CaseReportAgent(audience=audience, progress=status)
+            content = asyncio.run(agent.generate(case))
+    except Exception as exc:
+        from argus.cli.output import print_agent_error
+        print_agent_error(exc)
+        raise typer.Exit(1)
+
+    report_artifact = ReportArtifact(
+        report_type=audience,
+        title=f"{case.title} — {audience.upper()} Report",
+        classification=case.classification,
+        evidence_ids=[ev.evidence_id for ev in case.evidence],
+        content=content,
+    )
+
+    if save:
+        def mutate(c: Case) -> Case:
+            return c.model_copy(update={"reports": [*c.reports, report_artifact]})
+
+        try:
+            CaseStore().update(case_id, mutate)
+        except CaseStoreError as exc:
+            print_error(str(exc))
+            raise typer.Exit(1)
+
+    if json:
+        print_json(report_artifact)
+        return
+
+    render_markdown(content)
+
+
 @app.command("path")
 def case_path() -> None:
     """Print the active case storage directory."""
