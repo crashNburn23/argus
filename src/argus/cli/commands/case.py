@@ -463,6 +463,9 @@ def delete_case(
     console.print(f"[cp.green]deleted[/cp.green] [cp.cyan]{case_id}[/cp.cyan]")
 
 
+_VALID_ENRICH_SOURCES = frozenset({"abuseipdb", "shodan", "virustotal", "nvd"})
+
+
 @app.command("enrich")
 def enrich_case_observables(
     case_id: Annotated[str, typer.Argument(help="Case ID")],
@@ -474,6 +477,21 @@ def enrich_case_observables(
         str | None,
         typer.Option("--observable-id", "-o", help="Enrich a single observable"),
     ] = None,
+    sources: Annotated[
+        str | None,
+        typer.Option(
+            "--sources",
+            "-s",
+            help="Comma-separated list of sources to use (abuseipdb,shodan,virustotal,nvd)",
+        ),
+    ] = None,
+    min_confidence: Annotated[
+        float,
+        typer.Option(
+            "--min-confidence",
+            help="Minimum confidence threshold (0.0–1.0) to store an evidence item",
+        ),
+    ] = 0.0,
     json: Annotated[bool, typer.Option("--json", "-j", help="Output as JSON")] = False,
 ) -> None:
     """Enrich case observables via configured intelligence sources."""
@@ -504,6 +522,17 @@ def enrich_case_observables(
         console.print("[cp.dim]No observables to enrich.[/cp.dim]")
         return
 
+    allowed_sources: set[str] | None = None
+    if sources:
+        allowed_sources = {s.strip().lower() for s in sources.split(",")}
+        invalid = allowed_sources - _VALID_ENRICH_SOURCES
+        if invalid:
+            print_error(
+                f"Unknown source(s): {', '.join(sorted(invalid))}. "
+                f"Valid: {', '.join(sorted(_VALID_ENRICH_SOURCES))}"
+            )
+            raise typer.Exit(1)
+
     existing_enrichments: set[tuple[str, str]] = {
         (ev.metadata.get("enrichment_source", ""), obs_id)
         for ev in case.evidence
@@ -511,7 +540,9 @@ def enrich_case_observables(
         if ev.metadata.get("enrichment_source")
     }
 
-    new_evidence = asyncio.run(_run_enrichment(observables, existing_enrichments))
+    new_evidence = asyncio.run(
+        _run_enrichment(observables, existing_enrichments, allowed_sources, min_confidence)
+    )
     before = len(case.evidence)
 
     def mutate(c: Case) -> Case:
@@ -560,9 +591,15 @@ def enrich_case_observables(
             console.print(f"  [cp.red]✗[/cp.red] {src} / {obs_id}: {ev.summary}")
 
 
+def _source_allowed(source: str, allowed: set[str] | None) -> bool:
+    return allowed is None or source in allowed
+
+
 async def _run_enrichment(
     observables: list[Observable],
     existing_enrichments: set[tuple[str, str]],
+    allowed_sources: set[str] | None = None,
+    min_confidence: float = 0.0,
 ) -> list[EvidenceItem]:
     from argus.config.settings import get_settings
 
@@ -578,26 +615,49 @@ async def _run_enrichment(
         oid = obs.observable_id
 
         if obs_type == ObservableType.IP:
-            if abuseipdb_key and ("abuseipdb", oid) not in existing_enrichments:
+            if (
+                abuseipdb_key
+                and _source_allowed("abuseipdb", allowed_sources)
+                and ("abuseipdb", oid) not in existing_enrichments
+            ):
                 from argus.tools.abuseipdb import abuseipdb_check
                 all_tasks.append((obs, "abuseipdb", abuseipdb_check(value)))
-            if shodan_key and ("shodan", oid) not in existing_enrichments:
+            if (
+                shodan_key
+                and _source_allowed("shodan", allowed_sources)
+                and ("shodan", oid) not in existing_enrichments
+            ):
                 from argus.tools.shodan import shodan_lookup
                 all_tasks.append((obs, "shodan", shodan_lookup(ip=value)))
         elif obs_type == ObservableType.DOMAIN:
-            if vt_key and ("virustotal", oid) not in existing_enrichments:
+            if (
+                vt_key
+                and _source_allowed("virustotal", allowed_sources)
+                and ("virustotal", oid) not in existing_enrichments
+            ):
                 from argus.tools.virustotal import virustotal_lookup
                 all_tasks.append((obs, "virustotal", virustotal_lookup(value, "domain")))
         elif obs_type == ObservableType.URL:
-            if vt_key and ("virustotal", oid) not in existing_enrichments:
+            if (
+                vt_key
+                and _source_allowed("virustotal", allowed_sources)
+                and ("virustotal", oid) not in existing_enrichments
+            ):
                 from argus.tools.virustotal import virustotal_lookup
                 all_tasks.append((obs, "virustotal", virustotal_lookup(value, "url")))
         elif obs_type in {ObservableType.MD5, ObservableType.SHA1, ObservableType.SHA256}:
-            if vt_key and ("virustotal", oid) not in existing_enrichments:
+            if (
+                vt_key
+                and _source_allowed("virustotal", allowed_sources)
+                and ("virustotal", oid) not in existing_enrichments
+            ):
                 from argus.tools.virustotal import virustotal_lookup
                 all_tasks.append((obs, "virustotal", virustotal_lookup(value, obs_type.value)))
         elif obs_type == ObservableType.CVE:
-            if ("nvd", oid) not in existing_enrichments:
+            if (
+                _source_allowed("nvd", allowed_sources)
+                and ("nvd", oid) not in existing_enrichments
+            ):
                 from argus.tools.nvd import nvd_cve_lookup
                 all_tasks.append((obs, "nvd", nvd_cve_lookup(cve_id=value.upper())))
 
@@ -612,7 +672,9 @@ async def _run_enrichment(
         if isinstance(result, Exception):
             evidence_items.append(_error_evidence(obs, source, str(result)))
         else:
-            evidence_items.append(_parse_enrichment_evidence(obs, source, str(result)))
+            ev = _parse_enrichment_evidence(obs, source, str(result))
+            if ev.confidence >= min_confidence:
+                evidence_items.append(ev)
     return evidence_items
 
 
