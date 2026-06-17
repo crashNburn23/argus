@@ -855,9 +855,9 @@ def pivot_case_observables(
             )
             raise typer.Exit(1)
     if no_certs:
-        allowed_pivot_sources = (allowed_pivot_sources or _VALID_PIVOT_SOURCES) - {"ssl_cert"}
+        allowed_pivot_sources = set(allowed_pivot_sources or _VALID_PIVOT_SOURCES) - {"ssl_cert"}
     if no_whois:
-        allowed_pivot_sources = (allowed_pivot_sources or _VALID_PIVOT_SOURCES) - {"whois"}
+        allowed_pivot_sources = set(allowed_pivot_sources or _VALID_PIVOT_SOURCES) - {"whois"}
 
     try:
         case = CaseStore().get(case_id)
