@@ -523,14 +523,41 @@ def enrich_case_observables(
         print_error(str(exc))
         raise typer.Exit(1)
 
+    added = updated.evidence[before:]
+    failed = [ev for ev in added if ev.status == EvidenceStatus.FAILED]
+    succeeded = [ev for ev in added if ev.status != EvidenceStatus.FAILED]
+
     if json:
-        print_json(updated)
+        envelope = {
+            "status": "ok" if not failed else ("partial" if succeeded else "failed"),
+            "added": len(added),
+            "succeeded": len(succeeded),
+            "failed": len(failed),
+            "failures": [
+                {
+                    "observable_id": (ev.observable_ids[0] if ev.observable_ids else ""),
+                    "source": ev.source_name or ev.source_type,
+                    "error": ev.summary,
+                }
+                for ev in failed
+            ],
+            "case": json_lib.loads(updated.model_dump_json()),
+        }
+        print_json(envelope)
         return
     console.print(
         f"[cp.green]enriched[/cp.green] {len(observables)} observable(s), "
-        f"added {len(updated.evidence) - before} evidence item(s) "
+        f"added {len(succeeded)} evidence item(s) "
         f"to [cp.cyan]{case_id}[/cp.cyan]"
     )
+    if failed:
+        console.print(
+            f"[cp.amber]⚠ {len(failed)} collection failure(s):[/cp.amber]"
+        )
+        for ev in failed:
+            src = ev.source_name or ev.source_type
+            obs_id = ev.observable_ids[0] if ev.observable_ids else "unknown"
+            console.print(f"  [cp.red]✗[/cp.red] {src} / {obs_id}: {ev.summary}")
 
 
 async def _run_enrichment(
@@ -770,16 +797,44 @@ def pivot_case_observables(
         print_error(str(exc))
         raise typer.Exit(1)
 
+    added_ev = updated.evidence[before_ev:]
+    failed_ev = [ev for ev in added_ev if ev.status == EvidenceStatus.FAILED]
+    succeeded_ev = [ev for ev in added_ev if ev.status != EvidenceStatus.FAILED]
+
     if json:
-        print_json(updated)
+        envelope = {
+            "status": "ok" if not failed_ev else ("partial" if succeeded_ev else "failed"),
+            "new_observables": len(updated.observables) - before_obs,
+            "new_evidence": len(succeeded_ev),
+            "new_relationships": len(updated.relationships) - before_rel,
+            "failed": len(failed_ev),
+            "failures": [
+                {
+                    "observable_id": (ev.observable_ids[0] if ev.observable_ids else ""),
+                    "source": ev.source_name or ev.source_type,
+                    "error": ev.summary,
+                }
+                for ev in failed_ev
+            ],
+            "case": json_lib.loads(updated.model_dump_json()),
+        }
+        print_json(envelope)
         return
     console.print(
         f"[cp.green]pivoted[/cp.green] {len(observables)} observable(s): "
         f"+{len(updated.observables) - before_obs} observable(s), "
-        f"+{len(updated.evidence) - before_ev} evidence item(s), "
+        f"+{len(succeeded_ev)} evidence item(s), "
         f"+{len(updated.relationships) - before_rel} relationship(s) "
         f"added to [cp.cyan]{case_id}[/cp.cyan]"
     )
+    if failed_ev:
+        console.print(
+            f"[cp.amber]⚠ {len(failed_ev)} collection failure(s):[/cp.amber]"
+        )
+        for ev in failed_ev:
+            src = ev.source_name or ev.source_type
+            obs_id = ev.observable_ids[0] if ev.observable_ids else "unknown"
+            console.print(f"  [cp.red]✗[/cp.red] {src} / {obs_id}: {ev.summary}")
 
 
 async def _run_pivots(

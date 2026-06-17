@@ -257,7 +257,8 @@ def test_case_enrich_creates_evidence_from_mock_tools(monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output or result.stderr
     payload = json.loads(result.stdout)
-    evidence = payload["evidence"]
+    assert payload["status"] in {"ok", "partial"}
+    evidence = payload["case"]["evidence"]
     sources = {ev["source_name"] for ev in evidence if ev["source_type"] == "enrichment"}
     assert "abuseipdb" in sources
     assert "nvd" in sources
@@ -424,23 +425,26 @@ def test_case_pivot_creates_relationships_and_discovers_observables(monkeypatch)
 
     assert result.exit_code == 0, result.output or result.stderr
     payload = json.loads(result.stdout)
+    assert payload["status"] in {"ok", "partial"}
+    case_data = payload["case"]
 
-    obs_values = {o["canonical_value"] for o in payload["observables"]}
+    obs_values = {o["canonical_value"] for o in case_data["observables"]}
     assert "pivot-host1.example" in obs_values
 
-    rel_types = {r["relationship_type"] for r in payload["relationships"]}
+    rel_types = {r["relationship_type"] for r in case_data["relationships"]}
     assert "resolves_to" in rel_types
 
     ev_sources = {
         ev["metadata"].get("pivot_source")
-        for ev in payload["evidence"]
+        for ev in case_data["evidence"]
         if ev.get("metadata")
     }
     assert "passive_dns" in ev_sources
     assert "whois" in ev_sources
 
     whois_ev = next(
-        ev for ev in payload["evidence"] if ev.get("metadata", {}).get("pivot_source") == "whois"
+        ev for ev in case_data["evidence"]
+        if ev.get("metadata", {}).get("pivot_source") == "whois"
     )
     assert "BadRegistrar" in whois_ev["summary"]
 
