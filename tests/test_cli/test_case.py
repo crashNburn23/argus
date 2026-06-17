@@ -559,3 +559,89 @@ def test_case_report_json_output_stores_report_artifact() -> None:
     shown = runner.invoke(app, ["case", "show", case_id, "--json"])
     shown_payload = json.loads(shown.stdout)
     assert len(shown_payload["reports"]) == 1
+
+
+def test_case_status_transitions() -> None:
+    runner = CliRunner()
+
+    created = runner.invoke(app, ["case", "create", "Lifecycle test", "--json"])
+    case_id = json.loads(created.stdout)["case_id"]
+    assert json.loads(created.stdout)["status"] == "open"
+
+    active = runner.invoke(app, ["case", "status", case_id, "active", "--json"])
+    assert active.exit_code == 0
+    assert json.loads(active.stdout)["status"] == "active"
+
+    closed = runner.invoke(app, ["case", "status", case_id, "closed", "--json"])
+    assert closed.exit_code == 0
+    closed_payload = json.loads(closed.stdout)
+    assert closed_payload["status"] == "closed"
+    assert closed_payload["closed_at"] is not None
+
+    bad_status = runner.invoke(app, ["case", "status", case_id, "nonexistent"])
+    assert bad_status.exit_code == 1
+    assert "Invalid status" in bad_status.stderr
+
+
+def test_case_timeline_shows_events_in_order() -> None:
+    runner = CliRunner()
+
+    created = runner.invoke(app, ["case", "create", "Timeline test", "--json"])
+    case_id = json.loads(created.stdout)["case_id"]
+    runner.invoke(
+        app, ["case", "artifact", case_id, "--text", "198.51.100.10", "--type", "alert"]
+    )
+    runner.invoke(app, ["case", "extract", case_id])
+    runner.invoke(app, ["case", "note", case_id, "Analyst observation"])
+    runner.invoke(
+        app, ["case", "pir", case_id, "Who is responsible?", "--priority", "high"]
+    )
+
+    result = runner.invoke(app, ["case", "timeline", case_id, "--json"])
+    assert result.exit_code == 0
+    events = json.loads(result.stdout)
+    assert len(events) > 0
+    event_types = [e["type"] for e in events]
+    assert "case_opened" in event_types
+    assert "artifact" in event_types
+    assert "note" in event_types
+    assert "pir_added" in event_types
+    timestamps = [e["ts"] for e in events]
+    assert timestamps == sorted(timestamps)
+
+
+def test_case_analyze_with_review_flag_shows_grounding_result() -> None:
+    runner = CliRunner()
+
+    created = runner.invoke(app, ["case", "create", "Review test", "--json"])
+    case_id = json.loads(created.stdout)["case_id"]
+    runner.invoke(
+        app, ["case", "artifact", case_id, "--text", "198.51.100.10 CVE-2021-44228",
+               "--type", "report"]
+    )
+    runner.invoke(app, ["case", "extract", case_id])
+
+    from argus.agents.review_agent import ReviewResult
+
+    with (
+        patch(
+            "argus.agents.case_report_agent.CaseReportAgent.generate",
+            new_callable=AsyncMock,
+            return_value="# CTI\n\n198.51.100.10 is malicious [ev_xxx].",
+        ),
+        patch(
+            "argus.agents.review_agent.ReviewAgent._run_structured",
+            new_callable=AsyncMock,
+            return_value=ReviewResult(
+                passed=True,
+                grounded_claim_count=1,
+                summary="All claims grounded.",
+            ),
+        ),
+    ):
+        result = runner.invoke(
+            app, ["case", "analyze", case_id, "--audience", "cti", "--review", "--no-save"]
+        )
+
+    assert result.exit_code == 0, result.output or result.stderr
+    assert "review passed" in result.output or "grounded" in result.output
