@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class MITRETechnique(BaseModel):
@@ -17,6 +18,19 @@ class MITRETechnique(BaseModel):
 class Campaign(BaseModel):
     name: str
     description: str = ""
+
+
+class DetectionRecommendation(BaseModel):
+    technique_id: str = ""
+    name: str = ""
+    description: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_string(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return {"description": v}
+        return v
 
 
 class ThreatActor(BaseModel):
@@ -43,5 +57,5 @@ class ThreatActorResearchResult(BaseModel):
     actors: list[ThreatActor]
     summary: str = ""
     key_findings: list[str] = []
-    recommended_detections: list[str] = []
+    recommended_detections: list[DetectionRecommendation] = []
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))

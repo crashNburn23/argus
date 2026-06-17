@@ -40,6 +40,8 @@ _VERDICT_ALIASES: dict[str, str] = {
     "potentially unwanted": "suspicious",
 }
 
+_VALID_VERDICTS: frozenset[str] = frozenset({"malicious", "suspicious", "benign", "unknown"})
+
 
 class SourceResult(BaseModel):
     source: str
@@ -51,9 +53,19 @@ class SourceResult(BaseModel):
     @field_validator("verdict", mode="before")
     @classmethod
     def _normalize_verdict(cls, v: Any) -> Any:
-        if isinstance(v, str):
-            return _VERDICT_ALIASES.get(v.lower(), v)
-        return v
+        if not isinstance(v, str):
+            return v
+        # Full-string alias match (handles "potentially unwanted", "no verdict", etc.)
+        normalized = _VERDICT_ALIASES.get(v.lower(), v.lower())
+        if normalized in _VALID_VERDICTS:
+            return normalized
+        # First-token match — handles "suspicious (1/91)", "malicious - ransomware", etc.
+        first = v.split()[0].rstrip(".,;:(").lower() if v.split() else ""
+        normalized = _VERDICT_ALIASES.get(first, first)
+        if normalized in _VALID_VERDICTS:
+            return normalized
+        # Anything unrecognisable (e.g. Shodan service banners) → unknown
+        return "unknown"
 
     @field_validator("details", mode="before")
     @classmethod
@@ -80,6 +92,12 @@ class IOCEnrichmentRecord(BaseModel):
     last_seen: datetime | None = None
     stix_pattern: str | None = None
     kill_chain_phases: list[str] = []
+
+    # Pivot data — populated when passive DNS / cert / WHOIS tools are used
+    passive_dns: list[dict[str, Any]] = []       # historical resolutions
+    ssl_certs: list[dict[str, Any]] = []         # associated SSL/TLS certs
+    whois: dict[str, Any] | None = None          # registration data
+    related_infrastructure: list[str] = []       # IPs/domains discovered via pivoting
 
     @field_validator("asn", "geolocation", "stix_pattern", mode="before")
     @classmethod

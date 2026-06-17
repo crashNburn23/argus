@@ -9,6 +9,12 @@
 
 ---
 
+## Introduction
+
+{{ report.introduction }}
+
+---
+
 ## Executive Summary
 
 {{ report.executive_summary }}
@@ -23,49 +29,88 @@
 
 ---
 
-## Threat Landscape
+## Intelligence Assessment
 
-{{ report.threat_landscape }}
+{{ report.analyst_assessment }}
 
-{% if report.alert_summary %}
+{% if report.campaign_correlations %}
+### Observed Correlations
+
+{% for corr in report.campaign_correlations %}
+- {{ corr }}
+{% endfor %}
+{% endif %}
+
 ---
 
-## Alert Activity
+{% if report.threat_actor_profiles %}
+## Threat Actor Activity
 
-| Metric | Count |
+{% for profile in report.threat_actor_profiles %}
+{{ profile }}
+
+{% endfor %}
+---
+{% endif %}
+
+{% if report.ttp_analysis %}
+## Tactics, Techniques, and Procedures
+
+{{ report.ttp_analysis }}
+
+---
+{% endif %}
+
+{% if report.ioc_summary and report.ioc_summary.indicators %}
+## Indicators of Compromise
+
+| Indicator | Type | Verdict | Confidence | Associated Actors |
+|---|---|---|---|---|
+{% for ioc in report.ioc_summary.indicators[:15] %}
+{% if ioc.overall_verdict in ['malicious', 'suspicious'] %}
+| `{{ ioc.indicator }}` | {{ ioc.ioc_type }} | **{{ ioc.overall_verdict | upper }}** | {{ (ioc.confidence * 100) | round | int }}% | {{ ioc.threat_actors | join(', ') or '—' }} |
+{% endif %}
+{% endfor %}
+
+{% if report.ioc_summary.recommended_actions %}
+**Containment Actions:**
+{% for action in report.ioc_summary.recommended_actions %}
+- [ ] {{ action }}
+{% endfor %}
+{% endif %}
+
+---
+{% endif %}
+
+{% if report.vulnerability_summary and report.vulnerability_summary.actively_exploited %}
+## Actively Exploited Vulnerabilities
+
+{% for cve in report.vulnerability_summary.actively_exploited %}
+- **{{ cve }}**{% for v in report.vulnerability_summary.vulnerabilities %}{% if v.cve_id == cve %} (CVSS {{ v.cvss_v3_score or 'N/A' }}){% if v.in_cisa_kev %} ⚠️ CISA KEV{% endif %} — {{ v.description[:150] }}{% endif %}{% endfor %}
+{% endfor %}
+
+---
+{% endif %}
+
+{% if report.alert_summary %}
+## Alert Summary
+
+| Decision | Count |
 |---|---|
 | True Positives | {{ report.alert_summary.true_positive_count }} |
 | False Positives | {{ report.alert_summary.false_positive_count }} |
 | Needs Investigation | {{ report.alert_summary.needs_investigation_count }} |
 
 {% if report.alert_summary.high_priority_alerts %}
-**High Priority Alerts:** {{ report.alert_summary.high_priority_alerts | join(', ') }}
-{% endif %}
+**High Priority:** {{ report.alert_summary.high_priority_alerts | join(', ') }}
 {% endif %}
 
-{% if report.ioc_summary and report.ioc_summary.high_priority_iocs %}
 ---
-
-## High Priority Indicators
-
-| Indicator | Verdict | Confidence |
-|---|---|---|
-{% for ioc in report.ioc_summary.indicators[:10] %}
-{% if ioc.overall_verdict in ['malicious', 'suspicious'] %}
-| `{{ ioc.indicator }}` | {{ ioc.overall_verdict }} | {{ (ioc.confidence * 100) | round | int }}% |
-{% endif %}
-{% endfor %}
 {% endif %}
 
-{% if report.vulnerability_summary and report.vulnerability_summary.actively_exploited %}
----
+## Threat Landscape
 
-## Actively Exploited Vulnerabilities
-
-{% for cve in report.vulnerability_summary.actively_exploited %}
-- **{{ cve }}**{% if report.vulnerability_summary.vulnerabilities %}{% for v in report.vulnerability_summary.vulnerabilities %}{% if v.cve_id == cve %} — {{ v.description[:150] }}{% if v.in_cisa_kev %} ⚠️ CISA KEV{% endif %}{% endif %}{% endfor %}{% endif %}
-{% endfor %}
-{% endif %}
+{{ report.threat_landscape }}
 
 ---
 
@@ -75,6 +120,22 @@
 {{ loop.index }}. **[{{ rec.priority | upper }}]** {{ rec.action }}
    - *Rationale:* {{ rec.rationale }}
 {% endfor %}
+
+---
+
+## Confidence Assessment
+
+{{ report.confidence_assessment }}
+
+{% if report.references %}
+---
+
+## References
+
+{% for ref in report.references %}
+- {{ ref }}
+{% endfor %}
+{% endif %}
 
 ---
 

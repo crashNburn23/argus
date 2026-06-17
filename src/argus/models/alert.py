@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AlertSeverity(StrEnum):
@@ -31,13 +31,26 @@ class Alert(BaseModel):
     original_severity: str = ""
     extra: dict[str, Any] = {}
 
+    @field_validator("alert_id", mode="before")
+    @classmethod
+    def _coerce_alert_id(cls, v: Any) -> str:
+        return str(v)
+
+
+class EnrichedIOC(BaseModel):
+    ioc: str
+    type: str = ""  # ip, domain, hash, url
+    reputation: str = ""
+    connection: str = ""
+    extra: dict[str, Any] = {}
+
 
 class TriagedAlert(BaseModel):
     alert: Alert
     decision: TriageDecision = TriageDecision.NEEDS_INVESTIGATION
     risk_score: int = 0  # 1–10
     confidence: float = 0.0
-    enriched_iocs: list[str] = []
+    enriched_iocs: list[EnrichedIOC] = []
     related_threat_actors: list[str] = []
     related_techniques: list[str] = []
     analyst_notes: str = ""

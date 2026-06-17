@@ -9,6 +9,12 @@
 
 ---
 
+## Introduction
+
+{{ report.introduction }}
+
+---
+
 ## Executive Summary
 
 {{ report.executive_summary }}
@@ -23,42 +29,53 @@
 
 ---
 
-## Threat Landscape Overview
+## Intelligence Assessment
 
-{{ report.threat_landscape }}
+{{ report.analyst_assessment }}
 
-{% if report.threat_actor_summary and report.threat_actor_summary.actors %}
+{% if report.campaign_correlations %}
+### Observed Correlations
+
+{% for corr in report.campaign_correlations %}
+- {{ corr }}
+{% endfor %}
+{% endif %}
+
 ---
 
-## Threat Actor Profile: Active Groups This Month
+{% if report.threat_actor_profiles %}
+## Threat Actor Profiles
+
+{% for profile in report.threat_actor_profiles %}
+{{ profile }}
+
+{% endfor %}
+{% endif %}
+
+{% if report.threat_actor_summary and report.threat_actor_summary.actors %}
+### Structured Actor Data
 
 {% for actor in report.threat_actor_summary.actors %}
-### {{ actor.name }}
+#### {{ actor.name }}{% if actor.aliases %} *({{ actor.aliases | join(', ') }})*{% endif %}
 
 | Attribute | Detail |
 |---|---|
-| Aliases | {{ actor.aliases | join(', ') or '—' }} |
 | Motivation | {{ actor.primary_motivation or '—' }} |
 | Sophistication | {{ actor.sophistication or '—' }} |
-| Attribution | {{ actor.suspected_attribution or '—' }} |
+| Attribution | {{ actor.suspected_attribution | join(', ') if actor.suspected_attribution else '—' }} |
 | Targets | {{ actor.target_sectors | join(', ') or '—' }} |
 | Countries | {{ actor.target_countries | join(', ') or '—' }} |
 
-{{ actor.description[:600] }}
-
 {% if actor.techniques %}
-#### TTPs (MITRE ATT&CK)
+**TTPs (MITRE ATT&CK):**
 
 | ID | Technique | Tactic | Detection |
 |---|---|---|---|
 {% for tech in actor.techniques[:15] %}
-| {{ tech.technique_id }} | {{ tech.technique_name }} | {{ tech.tactic }} | {{ tech.detection_guidance[:80] or '—' }} |
+| [{{ tech.technique_id }}](https://attack.mitre.org/techniques/{{ tech.technique_id.replace('.', '/') }}/) | {{ tech.technique_name }} | {{ tech.tactic }} | {{ tech.detection_guidance[:80] or '—' }} |
 {% endfor %}
 {% endif %}
 
-{% if actor.campaigns %}
-**Campaigns:** {{ actor.campaigns | join(', ') }}
-{% endif %}
 {% if actor.associated_malware %}
 **Associated Malware:** {{ actor.associated_malware | join(', ') }}
 {% endif %}
@@ -66,10 +83,18 @@
 {% endfor %}
 {% endif %}
 
-{% if report.vulnerability_summary %}
 ---
 
-## Vulnerability Intelligence Summary
+{% if report.ttp_analysis %}
+## Tactics, Techniques, and Procedures
+
+{{ report.ttp_analysis }}
+
+---
+{% endif %}
+
+{% if report.vulnerability_summary %}
+## Vulnerability Intelligence
 
 | Severity | Count |
 |---|---|
@@ -82,11 +107,10 @@
 {% for vuln in report.vulnerability_summary.vulnerabilities[:15] %}
 #### {{ vuln.cve_id }}{% if vuln.in_cisa_kev %} ⚠️ CISA KEV{% endif %}
 
-- **Severity:** {{ vuln.severity | upper }} (CVSS: {{ vuln.cvss_v3_score or 'N/A' }})
-- **Exploitation:** {{ vuln.exploitation_status }}
+- **Severity:** {{ vuln.severity | upper }} (CVSS: {{ vuln.cvss_v3_score or 'N/A' }}) | **Exploitation:** {{ vuln.exploitation_status }}
 - **Description:** {{ vuln.description[:300] }}
 {% if vuln.affected_products %}
-- **Affected:** {{ vuln.affected_products[:3] | join(', ') }}{% if vuln.affected_products | length > 3 %}, +{{ vuln.affected_products | length - 3 }} more{% endif %}
+- **Affected:** {{ vuln.affected_products[:3] | join(', ') }}{% if vuln.affected_products | length > 3 %} +{{ vuln.affected_products | length - 3 }} more{% endif %}
 {% endif %}
 
 {% endfor %}
@@ -99,12 +123,12 @@
 {% for p in report.vulnerability_summary.patch_priority %}
 | **{{ p.priority | upper }}** | {{ p.cve_id }} | {{ p.rationale }} |
 {% endfor %}
+
+---
 {% endif %}
 
 {% if report.alert_summary %}
----
-
-## Alert Activity Summary
+## Alert Activity
 
 | Decision | Count |
 |---|---|
@@ -113,7 +137,13 @@
 | Needs Investigation | {{ report.alert_summary.needs_investigation_count }} |
 
 {{ report.alert_summary.summary }}
+
+---
 {% endif %}
+
+## Threat Landscape
+
+{{ report.threat_landscape }}
 
 ---
 
@@ -128,24 +158,30 @@
 
 ---
 
+## Confidence Assessment
+
+{{ report.confidence_assessment }}
+
+{% if report.references %}
+---
+
+## References
+
+{% for ref in report.references %}
+- {{ ref }}
+{% endfor %}
+{% endif %}
+
+---
+
 ## IOC Appendix
 
 {% if report.ioc_summary and report.ioc_summary.indicators %}
-### Indicator List
-
 | Indicator | Type | Verdict | Confidence | Threat Actors | Malware |
 |---|---|---|---|---|---|
 {% for ioc in report.ioc_summary.indicators %}
 | `{{ ioc.indicator }}` | {{ ioc.ioc_type }} | {{ ioc.overall_verdict }} | {{ (ioc.confidence * 100) | round | int }}% | {{ ioc.threat_actors | join(', ') or '—' }} | {{ ioc.malware_families | join(', ') or '—' }} |
 {% endfor %}
-
-{% if report.ioc_summary.recommended_actions %}
-### Recommended Containment Actions
-
-{% for action in report.ioc_summary.recommended_actions %}
-- {{ action }}
-{% endfor %}
-{% endif %}
 {% endif %}
 
 ---

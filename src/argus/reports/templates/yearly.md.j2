@@ -9,6 +9,12 @@
 
 ---
 
+## Introduction
+
+{{ report.introduction }}
+
+---
+
 ## Executive Summary
 
 {{ report.executive_summary }}
@@ -23,28 +29,43 @@
 
 ---
 
-## Annual Threat Landscape Review
+## Intelligence Assessment
 
-{{ report.threat_landscape }}
+{{ report.analyst_assessment }}
 
-{% if report.threat_actor_summary %}
+{% if report.campaign_correlations %}
+### Observed Correlations
+
+{% for corr in report.campaign_correlations %}
+- {{ corr }}
+{% endfor %}
+{% endif %}
+
 ---
 
-## Most Active Threat Actors
+{% if report.threat_actor_profiles %}
+## Threat Actor Profiles
+
+{% for profile in report.threat_actor_profiles %}
+{{ profile }}
+
+{% endfor %}
+{% endif %}
+
+{% if report.threat_actor_summary and report.threat_actor_summary.actors %}
+### Structured Actor Data
 
 {% for actor in report.threat_actor_summary.actors %}
-### {{ actor.name }}{% if actor.aliases %} ({{ actor.aliases | join(' / ') }}){% endif %}
+#### {{ actor.name }}{% if actor.aliases %} ({{ actor.aliases | join(' / ') }}){% endif %}
 
-**Motivation:** {{ actor.primary_motivation or 'Unknown' }} |
-**Sophistication:** {{ actor.sophistication or 'Unknown' }} |
-**Attribution:** {{ actor.suspected_attribution or 'Unknown' }}
+**Motivation:** {{ actor.primary_motivation or 'Unknown' }} | **Sophistication:** {{ actor.sophistication or 'Unknown' }} | **Attribution:** {{ actor.suspected_attribution | join(', ') if actor.suspected_attribution else 'Unknown' }}
 
 {{ actor.description[:800] }}
 
 {% if actor.techniques %}
 **Top Techniques:**
 {% for tech in actor.techniques[:8] %}
-- `{{ tech.technique_id }}` {{ tech.technique_name }} ({{ tech.tactic }})
+- [`{{ tech.technique_id }}`](https://attack.mitre.org/techniques/{{ tech.technique_id.replace('.', '/') }}/) {{ tech.technique_name }} ({{ tech.tactic }})
 {% endfor %}
 {% endif %}
 
@@ -54,14 +75,22 @@
 ### Recommended Detection Coverage
 
 {% for det in report.threat_actor_summary.recommended_detections %}
-- {{ det }}
+- {% if det.technique_id %}[{{ det.technique_id }}] {% endif %}{{ det.description or det.name }}
 {% endfor %}
 {% endif %}
 {% endif %}
 
-{% if report.vulnerability_summary %}
 ---
 
+{% if report.ttp_analysis %}
+## Tactics, Techniques, and Procedures
+
+{{ report.ttp_analysis }}
+
+---
+{% endif %}
+
+{% if report.vulnerability_summary %}
 ## Vulnerability Trends
 
 - **Critical CVEs Tracked:** {{ report.vulnerability_summary.critical_count }}
@@ -74,20 +103,26 @@
 - **{{ vuln.cve_id }}** ({{ vuln.severity | upper }}, CVSS {{ vuln.cvss_v3_score or 'N/A' }}){% if vuln.in_cisa_kev %} ⚠️ KEV{% endif %}: {{ vuln.description[:200] }}
 {% endfor %}
 {% endif %}
-{% endif %}
 
 ---
+{% endif %}
 
-## Year in Review: Trends
+## Year in Review
 
-- **Threat Actors:** {{ report.threat_actor_summary.actors | length if report.threat_actor_summary else 0 }} groups tracked
+- **Threat Actors Tracked:** {{ report.threat_actor_summary.actors | length if report.threat_actor_summary else 0 }}
 - **Critical Vulnerabilities:** {{ report.vulnerability_summary.critical_count if report.vulnerability_summary else 0 }}
 - **Actively Exploited CVEs:** {{ report.vulnerability_summary.actively_exploited | length if report.vulnerability_summary else 0 }}
 - **IOCs Analyzed:** {{ report.ioc_summary.indicators | length if report.ioc_summary else 0 }}
 
 ---
 
-## Strategic Recommendations for Next Year
+## Threat Landscape
+
+{{ report.threat_landscape }}
+
+---
+
+## Strategic Recommendations
 
 {% for rec in report.recommendations %}
 {{ loop.index }}. **[{{ rec.priority | upper }}]** {{ rec.action }}
@@ -95,6 +130,22 @@
    {{ rec.rationale }}
 
 {% endfor %}
+
+---
+
+## Confidence Assessment
+
+{{ report.confidence_assessment }}
+
+{% if report.references %}
+---
+
+## References
+
+{% for ref in report.references %}
+- {{ ref }}
+{% endfor %}
+{% endif %}
 
 ---
 

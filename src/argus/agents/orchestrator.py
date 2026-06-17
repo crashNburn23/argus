@@ -19,6 +19,8 @@ from argus.config.settings import get_settings
 from argus.llm import create_llm_client
 from argus.storage.database import get_session
 from argus.storage.models_db import AgentRunRecord
+from argus.tools import siem as siem_tool
+from argus.tools.registry import _AVAILABILITY
 
 log = structlog.get_logger()
 
@@ -31,15 +33,22 @@ _SYSTEM = """\
 You are the CTI Orchestrator — a senior threat intelligence analyst who coordinates
 specialized AI agents to answer complex cybersecurity questions.
 
-You have access to the following specialized agents as tools:
-- ioc_enrichment_agent: Enrich IPs, domains, URLs, and file hashes against multiple threat feeds
+You have access to the following tools:
+- siem_query: Fetch raw alert and log events from the SIEM (Splunk or configured backend)
+- ioc_enrichment_agent: Enrich IPs, domains, URLs, and file hashes against threat feeds
 - threat_actor_agent: Research threat actors, campaigns, and MITRE ATT&CK TTPs
 - vuln_intel_agent: Look up CVE details, exploitation status, CISA KEV, and exposed systems
-- triage_agent: Triage security alerts, extract and enrich IOCs, assign risk scores
+- triage_agent: Triage security alerts — requires real alert objects with actual log data
 
-Decide which agents to invoke based on the user's request. You can invoke multiple agents.
-Synthesize their results into a clear, actionable response.
-Be specific and reference evidence from the agents' findings."""
+IMPORTANT — fetching SIEM data before triage:
+When asked to triage, analyze, or report on SIEM alerts or log events, you MUST call
+siem_query first to fetch the actual events. Pass the returned events as the `alerts`
+list to triage_agent. Never fabricate alert content — only triage data that siem_query
+returned. If siem_query returns an error or no results, report that to the user instead
+of inventing alerts.
+
+Decide which tools to invoke based on the user's request. Synthesize results into a
+clear, actionable response. Be specific and reference evidence from findings."""
 
 _COMPLETION_CHECK_SYSTEM = """\
 You are a senior CTI analyst verifying that an analysis fully answers the original question.
@@ -63,7 +72,7 @@ Rules:
 - Do NOT mark a gap as retriable if a tool already attempted it and returned an error.
 - Prefer marking ambiguous gaps as permanent over triggering endless retries."""
 
-# Tool definitions for each sub-agent (registered as Claude tools)
+# Sub-agent tool definitions (always present)
 _AGENT_TOOL_DEFINITIONS = [
     {
         "name": "ioc_enrichment_agent",
@@ -181,6 +190,11 @@ class CTIOrchestrator:
             "vuln_intel_agent": VulnIntelAgent(progress=progress),
             "triage_agent": TriageAgent(progress=progress),
         }
+        # Include siem_query as a direct tool when SIEM is configured
+        self._tool_definitions = list(_AGENT_TOOL_DEFINITIONS)
+        siem_check = _AVAILABILITY.get("siem_query")
+        if siem_check and siem_check(settings):
+            self._tool_definitions.insert(0, siem_tool.get_tool_definition())
 
     def _progress(self, message: str) -> None:
         callback = getattr(self, "progress", None)
@@ -216,7 +230,9 @@ class CTIOrchestrator:
         detail = self._summarize_agent_input(tool_input)
         self._progress(f"orchestrator: routing {detail} to {tool_name}")
         try:
-            if tool_name == "ioc_enrichment_agent":
+            if tool_name == "siem_query":
+                return await siem_tool.siem_query(**tool_input)
+            elif tool_name == "ioc_enrichment_agent":
                 result = await self._agents["ioc_enrichment_agent"].run(**tool_input)
             elif tool_name == "threat_actor_agent":
                 result = await self._agents["threat_actor_agent"].run(**tool_input)
@@ -261,7 +277,7 @@ class CTIOrchestrator:
                 model=self.model,
                 max_tokens=8192,
                 system=_SYSTEM,
-                tools=_AGENT_TOOL_DEFINITIONS,
+                tools=self._tool_definitions,
                 messages=messages,
             )
             total_input += response.usage.input_tokens
@@ -423,7 +439,7 @@ class CTIOrchestrator:
                     model=self.model,
                     max_tokens=8192,
                     system=_SYSTEM,
-                    tools=_AGENT_TOOL_DEFINITIONS,
+                    tools=self._tool_definitions,
                     messages=fill_messages,
                 )
                 if response.stop_reason == "end_turn":

@@ -9,6 +9,12 @@
 
 ---
 
+## Introduction
+
+{{ report.introduction }}
+
+---
+
 ## Executive Summary
 
 {{ report.executive_summary }}
@@ -23,39 +29,39 @@
 
 ---
 
-## Threat Landscape
+## Intelligence Assessment
 
-{{ report.threat_landscape }}
+{{ report.analyst_assessment }}
 
-{% if report.threat_actor_summary and report.threat_actor_summary.actors %}
----
+{% if report.campaign_correlations %}
+### Observed Correlations
 
-## Threat Actor Activity
-
-{% for actor in report.threat_actor_summary.actors[:5] %}
-### {{ actor.name }}{% if actor.aliases %} *({{ actor.aliases | join(', ') }})*{% endif %}
-
-{{ actor.description[:400] }}
-
-{% if actor.techniques %}
-**MITRE ATT&CK Techniques:**
-
-| Technique ID | Name | Tactic |
-|---|---|---|
-{% for tech in actor.techniques[:10] %}
-| [{{ tech.technique_id }}](https://attack.mitre.org/techniques/{{ tech.technique_id.replace('.', '/') }}/) | {{ tech.technique_name }} | {{ tech.tactic }} |
+{% for corr in report.campaign_correlations %}
+- {{ corr }}
 {% endfor %}
 {% endif %}
 
-{% if actor.target_sectors %}**Target Sectors:** {{ actor.target_sectors | join(', ') }}{% endif %}
-{% if actor.target_countries %}**Target Countries:** {{ actor.target_countries | join(', ') }}{% endif %}
+---
+
+{% if report.threat_actor_profiles %}
+## Threat Actor Profiles
+
+{% for profile in report.threat_actor_profiles %}
+{{ profile }}
 
 {% endfor %}
+---
+{% endif %}
+
+{% if report.ttp_analysis %}
+## Tactics, Techniques, and Procedures
+
+{{ report.ttp_analysis }}
+
+---
 {% endif %}
 
 {% if report.vulnerability_summary %}
----
-
 ## Vulnerability Intelligence
 
 | Metric | Count |
@@ -69,24 +75,30 @@
 | Priority | CVE | Rationale |
 |---|---|---|
 {% for p in report.vulnerability_summary.patch_priority[:10] %}
-| {{ p.priority | upper }} | {{ p.cve_id }} | {{ p.rationale[:100] }} |
+| {{ p.priority | upper }} | {{ p.cve_id }} | {{ p.rationale[:120] }} |
 {% endfor %}
 {% endif %}
+
+---
 {% endif %}
 
 {% if report.ioc_summary %}
----
+## Indicators of Compromise
 
-## IOC Summary
-
-- **Total Indicators Analyzed:** {{ report.ioc_summary.indicators | length }}
+- **Total Analyzed:** {{ report.ioc_summary.indicators | length }}
 - **Malicious:** {{ report.ioc_summary.indicators | selectattr('overall_verdict', 'eq', 'malicious') | list | length }}
 - **Suspicious:** {{ report.ioc_summary.indicators | selectattr('overall_verdict', 'eq', 'suspicious') | list | length }}
 
 {% if report.ioc_summary.high_priority_iocs %}
-**High Priority IOCs:** `{{ report.ioc_summary.high_priority_iocs | join('`, `') }}`
+**High Priority:** `{{ report.ioc_summary.high_priority_iocs | join('`, `') }}`
 {% endif %}
+
+---
 {% endif %}
+
+## Threat Landscape
+
+{{ report.threat_landscape }}
 
 ---
 
@@ -99,15 +111,31 @@
 
 ---
 
+## Confidence Assessment
+
+{{ report.confidence_assessment }}
+
+{% if report.references %}
+---
+
+## References
+
+{% for ref in report.references %}
+- {{ ref }}
+{% endfor %}
+{% endif %}
+
+---
+
 ## Technical Appendix
 
 {% if report.ioc_summary and report.ioc_summary.indicators %}
 ### IOC Details
 
-| Indicator | Type | Verdict | Confidence | Malware Families |
-|---|---|---|---|---|
+| Indicator | Type | Verdict | Confidence | Malware Families | Threat Actors |
+|---|---|---|---|---|---|
 {% for ioc in report.ioc_summary.indicators[:20] %}
-| `{{ ioc.indicator }}` | {{ ioc.ioc_type }} | {{ ioc.overall_verdict }} | {{ (ioc.confidence * 100) | round | int }}% | {{ ioc.malware_families | join(', ') or '—' }} |
+| `{{ ioc.indicator }}` | {{ ioc.ioc_type }} | {{ ioc.overall_verdict }} | {{ (ioc.confidence * 100) | round | int }}% | {{ ioc.malware_families | join(', ') or '—' }} | {{ ioc.threat_actors | join(', ') or '—' }} |
 {% endfor %}
 {% endif %}
 

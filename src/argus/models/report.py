@@ -43,12 +43,21 @@ class CTIReport(BaseModel):
     scope: str = ""
     classification: ReportClassification = ReportClassification.AMBER
 
+    # Narrative sections — populated by ReportAgent
+    introduction: str = ""
     executive_summary: str = ""
     key_findings: list[str] = []
-    threat_landscape: str = ""
+    analyst_assessment: str = ""        # core analytical product: correlations, attribution, intent
+    threat_actor_profiles: list[str] = []  # per-actor narrative tied to observed evidence
+    ttp_analysis: str = ""              # MITRE ATT&CK-mapped TTP narrative
+    campaign_correlations: list[str] = []  # specific cross-source connections
+    threat_landscape: str = ""          # broader context / sector trends
+    confidence_assessment: str = ""     # confidence level and intelligence gaps
     recommendations: list[Recommendation] = []
+    references: list[str] = []
     technical_appendix: dict[str, Any] = {}
 
+    # Raw intelligence — populated by specialized agents
     ioc_summary: IOCEnrichmentResult | None = None
     threat_actor_summary: ThreatActorResearchResult | None = None
     vulnerability_summary: VulnIntelResult | None = None
@@ -56,5 +65,5 @@ class CTIReport(BaseModel):
 
     format: str = "markdown"
     content: str = ""  # rendered Jinja2 output
-    start_time: datetime | None = None  # explicit report time window start
-    end_time: datetime | None = None    # explicit report time window end
+    start_time: datetime | None = None
+    end_time: datetime | None = None

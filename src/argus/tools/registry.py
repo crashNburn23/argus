@@ -8,15 +8,18 @@ from argus.config.settings import get_settings
 from argus.tools import (
     abuseipdb,
     alienvault_otx,
+    certs,
     misp,
     mitre_attack,
     nvd,
+    passive_dns,
     recorded_future,
     shodan,
     siem,
     urlhaus,
     virustotal,
     web_search,
+    whois,
 )
 
 # Maps tool name → availability check lambda
@@ -27,7 +30,23 @@ _AVAILABILITY: dict[str, Callable[..., bool]] = {
     "abuseipdb_check": lambda s: bool(s.api_key("abuseipdb")),
     "otx_lookup": lambda s: bool(s.api_key("otx")),
     "misp_search": lambda s: bool(s.misp_url),
-    "siem_query": lambda s: bool(s.siem_type),
+    # Pivot tools
+    "passive_dns_lookup": lambda s: bool(s.api_key("virustotal")),
+    "ssl_cert_lookup": lambda s: True,   # crt.sh is always free
+    "whois_lookup": lambda s: True,      # RDAP is always free
+    "siem_query": lambda s: (
+        bool(
+            s.siem_url
+            and (
+                (s.siem_api_key and s.siem_api_key.get_secret_value())
+                or (s.splunk_username and s.splunk_password.get_secret_value())
+            )
+        )
+        if s.siem_type.lower() == "splunk"
+        else bool(s.siem_log_path)
+        if s.siem_type.lower() == "file"
+        else bool(s.siem_url)
+    ),
     # Always available — no key required
     "mitre_attack_lookup": lambda s: True,
     "nvd_cve_lookup": lambda s: True,
@@ -48,17 +67,21 @@ _DEFINITIONS: dict[str, Callable[[], dict[str, Any]]] = {
     "nvd_cve_lookup": nvd.get_tool_definition,
     "urlhaus_lookup": urlhaus.get_tool_definition,
     "web_search": web_search.get_tool_definition,
+    "passive_dns_lookup": passive_dns.get_tool_definition,
+    "ssl_cert_lookup": certs.get_tool_definition,
+    "whois_lookup": whois.get_tool_definition,
 }
 
 # Which tools each agent type uses
 _AGENT_TOOLS: dict[str, list[str]] = {
     "ioc": [
         "virustotal_lookup", "shodan_lookup", "abuseipdb_check", "otx_lookup", "urlhaus_lookup",
+        "passive_dns_lookup", "ssl_cert_lookup", "whois_lookup",
     ],
     "threat_actor": ["mitre_attack_lookup", "otx_lookup", "recorded_future_search", "web_search"],
     "vuln": ["nvd_cve_lookup", "shodan_lookup"],
     "triage": ["virustotal_lookup", "abuseipdb_check", "otx_lookup", "mitre_attack_lookup"],
-    "report": [],  # report agent delegates to other agents, no direct API tools
+    "report": ["siem_query"],
     "orchestrator": [],  # orchestrator uses agents as tools
 }
 
@@ -106,7 +129,13 @@ def tool_status() -> list[dict[str, Any]]:
             if name == "misp_search":
                 reason = "MISP_URL not configured"
             elif name == "siem_query":
-                reason = "SIEM_TYPE not configured"
+                siem_type = settings.siem_type.lower()
+                if siem_type == "splunk":
+                    reason = "SIEM_URL or Splunk credentials not configured"
+                elif siem_type == "file":
+                    reason = "SIEM_LOG_PATH not configured"
+                else:
+                    reason = "SIEM_URL not configured"
             else:
                 reason = "API key not configured"
         result.append({"name": name, "available": available, "reason": reason})
@@ -118,15 +147,18 @@ async def dispatch_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
     from argus.tools import (
         abuseipdb,
         alienvault_otx,
+        certs,
         misp,
         mitre_attack,
         nvd,
+        passive_dns,
         recorded_future,
         shodan,
         siem,
         urlhaus,
         virustotal,
         web_search,
+        whois,
     )
 
     _HANDLERS: dict[str, Callable[..., Any]] = {
@@ -141,6 +173,9 @@ async def dispatch_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
         "nvd_cve_lookup": nvd.nvd_cve_lookup,
         "urlhaus_lookup": urlhaus.urlhaus_lookup,
         "web_search": web_search.web_search,
+        "passive_dns_lookup": passive_dns.passive_dns_lookup,
+        "ssl_cert_lookup": certs.ssl_cert_lookup,
+        "whois_lookup": whois.whois_lookup,
     }
 
     handler = _HANDLERS.get(tool_name)
