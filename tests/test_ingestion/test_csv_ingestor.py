@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from argus.ingestion.csv_ingestor import CsvIngestResult, ingest_csv, is_csv
+from argus.ingestion.csv_ingestor import ingest_csv, is_csv
 from argus.models.evidence import ObservableType
 
 _BASIC_CSV = """\
