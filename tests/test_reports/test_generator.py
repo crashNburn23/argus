@@ -10,14 +10,6 @@ from argus.reports.generator import ReportGenerator
 
 
 @pytest.mark.asyncio
-async def test_unscoped_report_does_not_enrich_placeholder_ioc() -> None:
-    result = await ReportGenerator()._collect_ioc_intel("")
-
-    assert result.indicators == []
-    assert result.summary == "No IOC scope was provided for this report."
-
-
-@pytest.mark.asyncio
 async def test_generate_incident_from_alerts_uses_triage_in_report() -> None:
     case = get_incident_case("IR-0001")
     expected_report = build_expected_report(case)

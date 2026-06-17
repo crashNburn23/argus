@@ -11,7 +11,6 @@ from typing import Any
 import structlog
 
 from argus.agents.errors import AgentError
-from argus.agents.ioc_agent import IOCEnrichmentAgent
 from argus.agents.threat_actor_agent import ThreatActorAgent
 from argus.agents.triage_agent import TriageAgent
 from argus.agents.vuln_agent import VulnIntelAgent
@@ -35,10 +34,12 @@ specialized AI agents to answer complex cybersecurity questions.
 
 You have access to the following tools:
 - siem_query: Fetch raw alert and log events from the SIEM (Splunk or configured backend)
-- ioc_enrichment_agent: Enrich IPs, domains, URLs, and file hashes against threat feeds
 - threat_actor_agent: Research threat actors, campaigns, and MITRE ATT&CK TTPs
 - vuln_intel_agent: Look up CVE details, exploitation status, CISA KEV, and exposed systems
 - triage_agent: Triage security alerts — requires real alert objects with actual log data
+
+Note: IOC enrichment (IPs, domains, hashes) is handled via `argus case enrich` in the
+case workflow. Direct your users there for indicator enrichment with provenance tracking.
 
 IMPORTANT — fetching SIEM data before triage:
 When asked to triage, analyze, or report on SIEM alerts or log events, you MUST call
@@ -74,29 +75,6 @@ Rules:
 
 # Sub-agent tool definitions (always present)
 _AGENT_TOOL_DEFINITIONS = [
-    {
-        "name": "ioc_enrichment_agent",
-        "description": (
-            "Enrich indicators of compromise (IPs, domains, URLs, file hashes) against "
-            "VirusTotal, Shodan, AbuseIPDB, AlienVault OTX, and URLhaus."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "indicators": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of IOC values to enrich",
-                },
-                "ioc_type": {
-                    "type": "string",
-                    "description": "IOC type hint: auto, ip, domain, url, md5, sha256",
-                    "default": "auto",
-                },
-            },
-            "required": ["indicators"],
-        },
-    },
     {
         "name": "threat_actor_agent",
         "description": (
@@ -185,7 +163,6 @@ class CTIOrchestrator:
         self.progress = progress
         self._conversation: list[dict[str, Any]] = []
         self._agents = {
-            "ioc_enrichment_agent": IOCEnrichmentAgent(progress=progress),
             "threat_actor_agent": ThreatActorAgent(progress=progress),
             "vuln_intel_agent": VulnIntelAgent(progress=progress),
             "triage_agent": TriageAgent(progress=progress),

@@ -19,10 +19,8 @@ from argus.cli.commands import (
     benchmark,
     case,
     doctor,
-    enrich,
     model,
     query,
-    report,
     research,
     triage,
     vuln,
@@ -149,12 +147,10 @@ app = typer.Typer(
 )
 
 # Register sub-apps
-app.add_typer(enrich.app, name="enrich", help="Enrich IOCs (ip, domain, hash, url)")
 app.add_typer(research.app, name="research", help="Research threat actors and campaigns")
 app.add_typer(vuln.app, name="vuln", help="Vulnerability intelligence")
 app.add_typer(triage.app, name="triage", help="Triage security alerts")
-app.add_typer(report.app, name="report", help="Generate CTI reports")
-app.add_typer(case.app, name="case", help="Manage CTI cases")
+app.add_typer(case.app, name="case", help="Manage CTI cases (create, enrich, pivot, analyze)")
 app.add_typer(query.app, name="query", help="Natural language queries via orchestrator")
 app.add_typer(benchmark.app, name="benchmark", help="Incident response report benchmarks")
 app.command("model")(model.model_command)
@@ -162,10 +158,9 @@ app.command("doctor")(doctor.doctor_command)
 app.command("ask")(query.ask)
 
 _SLASH_COMMANDS = [
-    ("/enrich",   "<indicator...>"),
+    ("/case",     "new|list|use|show|enrich|pivot|analyze|report"),
     ("/research", "<actor or campaign>"),
     ("/vuln",     "<CVE-ID...>"),
-    ("/report",   "daily|weekly|monthly|yearly|incident"),
     ("/triage",   "<raw log>"),
     ("/model",    "[name|list]"),
     ("/theme",    "[name|list]"),
@@ -184,6 +179,8 @@ _SLASH_COMMANDS = [
     ("/exit",     ""),
     ("/quit",     ""),
 ]
+
+_CASE_SUBCOMMANDS = ["new", "list", "use", "show", "enrich", "pivot", "analyze", "report"]
 
 _REPORT_TYPES = ["daily", "weekly", "monthly", "yearly", "incident"]
 
@@ -221,11 +218,11 @@ class _ArgusCompleter(Completer):
 
         partial = parts[1].lstrip()
 
-        # /report → complete report type
-        if verb == "/report":
-            for rt in _REPORT_TYPES:
-                if rt.startswith(partial):
-                    yield Completion(rt[len(partial):], display=rt)
+        # /case → complete subcommands
+        if verb == "/case":
+            for sub in _CASE_SUBCOMMANDS:
+                if sub.startswith(partial):
+                    yield Completion(sub[len(partial):], display=sub)
 
         # /model → complete "list" or local Ollama model names
         elif verb == "/model":
@@ -271,31 +268,151 @@ class _ArgusCompleter(Completer):
 _SLASH_HELP = """
 [cp.magenta]// ARGUS COMMANDS //[/cp.magenta]
 
-  [cp.cyan]/enrich[/cp.cyan]  [cp.dim]<indicator...>[/cp.dim]   Enrich IPs, domains, URLs, hashes
-  [cp.cyan]/research[/cp.cyan] [cp.dim]<actor>[/cp.dim]        Research a threat actor or campaign
-  [cp.cyan]/vuln[/cp.cyan]    [cp.dim]<CVE-ID...>[/cp.dim]       Look up CVE intelligence
-  [cp.cyan]/report[/cp.cyan]  [cp.dim]daily|weekly|...[/cp.dim]  Generate a CTI report
-  [cp.cyan]/triage[/cp.cyan]  [cp.dim]<raw log>[/cp.dim]         Triage a raw alert
-  [cp.cyan]/model[/cp.cyan]                       Show or switch model
-  [cp.cyan]/model[/cp.cyan]   [cp.dim]<name>[/cp.dim]            Switch to a local Ollama model
-  [cp.cyan]/theme[/cp.cyan]                       List available themes
-  [cp.cyan]/theme[/cp.cyan]   [cp.dim]<name>[/cp.dim]            Switch theme and re-render history
-  [cp.cyan]/doctor[/cp.cyan]                      Check model, storage, and source readiness
-  [cp.cyan]/status[/cp.cyan]                      Show active model and conversation state
-  [cp.cyan]/verbose[/cp.cyan] [cp.dim][on|off][/cp.dim]             Toggle runtime log messages
-  [cp.cyan]/clear[/cp.cyan] [cp.dim]or[/cp.dim] [cp.cyan]/new[/cp.cyan]   Start a fresh conversation
-  [cp.cyan]/cache[/cp.cyan]                       Cache statistics
-  [cp.cyan]/sessions[/cp.cyan]                    List saved sessions
-  [cp.cyan]/sessions[/cp.cyan] [cp.dim]delete <id>[/cp.dim]     Delete a saved session
-  [cp.cyan]/save[/cp.cyan]    [cp.dim][title][/cp.dim]           Save current session
-  [cp.cyan]/resume[/cp.cyan]  [cp.dim]<session-id>[/cp.dim]     Resume a saved session
-  [cp.cyan]/runs[/cp.cyan]    [cp.dim][N][/cp.dim]               Show last N agent runs (default 10)
-  [cp.cyan]/sources[/cp.cyan]                     Show tool/source availability
-  [cp.cyan]/help[/cp.cyan]                        This message
-  [cp.cyan]/exit[/cp.cyan]   [cp.dim]or[/cp.dim]  [cp.cyan]/quit[/cp.cyan]      Close session
+[cp.magenta]Case workflow:[/cp.magenta]
+  [cp.cyan]/case new[/cp.cyan]  [cp.dim]<title>[/cp.dim]     Create a case and set it active
+  [cp.cyan]/case list[/cp.cyan]              List recent cases
+  [cp.cyan]/case use[/cp.cyan]  [cp.dim]<id>[/cp.dim]        Set the active case
+  [cp.cyan]/case show[/cp.cyan]              Show active case summary
+  [cp.cyan]/case enrich[/cp.cyan]            Enrich observables in the active case
+  [cp.cyan]/case pivot[/cp.cyan]             Pivot active case observables
+  [cp.cyan]/case analyze[/cp.cyan] [cp.dim][audience][/cp.dim] LLM report (default: cti)
+  [cp.cyan]/case report[/cp.cyan]            Deterministic report (no LLM)
 
-[cp.dim]Anything else is routed to the orchestrator as a natural language query.[/cp.dim]
+[cp.magenta]Research:[/cp.magenta]
+  [cp.cyan]/research[/cp.cyan] [cp.dim]<actor>[/cp.dim]      Research a threat actor or campaign
+  [cp.cyan]/vuln[/cp.cyan]     [cp.dim]<CVE-ID...>[/cp.dim]  Look up CVE intelligence
+  [cp.cyan]/triage[/cp.cyan]   [cp.dim]<raw log>[/cp.dim]    Triage a raw alert
+
+[cp.magenta]Session:[/cp.magenta]
+  [cp.cyan]/model[/cp.cyan]                  Show or switch model
+  [cp.cyan]/theme[/cp.cyan]   [cp.dim][name][/cp.dim]        Switch theme (or list)
+  [cp.cyan]/doctor[/cp.cyan]                 Check readiness
+  [cp.cyan]/status[/cp.cyan]                 Model, active case, conversation state
+  [cp.cyan]/verbose[/cp.cyan] [cp.dim][on|off][/cp.dim]      Toggle runtime log messages
+  [cp.cyan]/clear[/cp.cyan] [cp.dim]or[/cp.dim] [cp.cyan]/new[/cp.cyan]   Fresh conversation
+  [cp.cyan]/cache[/cp.cyan]                  Cache statistics
+  [cp.cyan]/sessions[/cp.cyan]               List saved sessions
+  [cp.cyan]/save[/cp.cyan]    [cp.dim][title][/cp.dim]       Save current session
+  [cp.cyan]/resume[/cp.cyan]  [cp.dim]<id>[/cp.dim]         Resume a saved session
+  [cp.cyan]/runs[/cp.cyan]    [cp.dim][N][/cp.dim]           Last N agent runs (default 10)
+  [cp.cyan]/sources[/cp.cyan]                Source availability
+  [cp.cyan]/help[/cp.cyan]                   This message
+  [cp.cyan]/exit[/cp.cyan] [cp.dim]or[/cp.dim] [cp.cyan]/quit[/cp.cyan]   Close session
+
+[cp.dim]Anything else → CTI orchestrator (actor research, CVE queries, SIEM triage).[/cp.dim]
 """
+
+
+async def _handle_case(args: list[str], session_state: dict[str, Any] | None) -> None:
+    """Dispatch /case <subcommand> [args] from the interactive shell."""
+    from argus.storage.cases import CaseNotFoundError, CaseStore, CaseStoreError
+
+    sub = args[0].lower() if args else ""
+    rest = args[1:]
+
+    if sub == "new":
+        from argus.models.case import Case as _Case
+        title = " ".join(rest) if rest else "Untitled case"
+        try:
+            new_case = CaseStore().create(_Case(title=title))
+        except CaseStoreError as exc:
+            console.print(f"[cp.red]ERR ▸[/cp.red] {exc}")
+            return
+        if session_state is not None:
+            session_state["active_case_id"] = new_case.case_id
+        console.print(
+            f"[cp.green]✓[/cp.green] case created: [cp.cyan]{new_case.case_id}[/cp.cyan]"
+            f"  [cp.dim]{title}[/cp.dim]  (set as active)"
+        )
+
+    elif sub == "list":
+        try:
+            cases = CaseStore().list()[:15]
+        except CaseStoreError as exc:
+            console.print(f"[cp.red]ERR ▸[/cp.red] {exc}")
+            return
+        if not cases:
+            console.print("[cp.dim]No cases found. Use /case new <title> to create one.[/cp.dim]")
+            return
+        from rich.table import Table as _Table
+        active_id = (session_state or {}).get("active_case_id", "")
+        t = _Table(
+            title="[cp.cyan]Recent Cases[/cp.cyan]",
+            show_header=True,
+            header_style="cp.magenta",
+            border_style="cp.border",
+        )
+        t.add_column("", width=2)
+        t.add_column("ID", style="cp.cyan", no_wrap=True)
+        t.add_column("Title")
+        t.add_column("Status")
+        t.add_column("Updated", no_wrap=True)
+        for c in cases:
+            marker = "▶" if c.case_id == active_id else ""
+            updated = c.updated_at.strftime("%Y-%m-%d %H:%M") if c.updated_at else ""
+            t.add_row(marker, c.case_id[:12], c.title[:50], c.status.value, updated)
+        console.print(t)
+
+    elif sub == "use":
+        if not rest:
+            console.print("[cp.amber]usage:[/cp.amber] /case use <case-id>")
+            return
+        case_id = rest[0]
+        try:
+            c = CaseStore().get(case_id)
+        except CaseNotFoundError:
+            console.print(f"[cp.amber]case not found:[/cp.amber] {case_id}")
+            return
+        if session_state is not None:
+            session_state["active_case_id"] = c.case_id
+        console.print(
+            f"[cp.green]✓[/cp.green] active case: [cp.cyan]{c.case_id}[/cp.cyan]"
+            f"  [cp.dim]{c.title}[/cp.dim]"
+        )
+
+    elif sub == "show":
+        case_id = str((session_state or {}).get("active_case_id") or "")
+        if not case_id:
+            console.print("[cp.amber]No active case.[/cp.amber] Use /case use <id> or /case new.")
+            return
+        try:
+            c = CaseStore().get(case_id)
+        except CaseNotFoundError:
+            console.print(f"[cp.amber]case not found:[/cp.amber] {case_id}")
+            return
+        console.print(
+            f"[cp.cyan]{c.case_id}[/cp.cyan]  [bold]{c.title}[/bold]  [{c.status.value}]\n"
+            f"  Observables: [cp.green]{len(c.observables)}[/cp.green]  "
+            f"Evidence: [cp.green]{len(c.evidence)}[/cp.green]  "
+            f"Relationships: [cp.green]{len(c.relationships)}[/cp.green]  "
+            f"Notes: [cp.green]{len(c.notes)}[/cp.green]"
+        )
+        if c.pirs:
+            console.print(f"  PIRs: {', '.join(p.question[:40] for p in c.pirs[:3])}")
+
+    elif sub in ("enrich", "pivot", "analyze", "report"):
+        case_id = (session_state or {}).get("active_case_id") or ""
+        if not case_id:
+            console.print("[cp.amber]No active case.[/cp.amber] Use /case use <id> or /case new.")
+            return
+        from typer.testing import CliRunner
+
+        from argus.cli.commands.case import app as case_app
+        runner = CliRunner()
+        extra = list(rest)
+        if sub == "analyze" and not any(a.startswith("--audience") for a in extra):
+            audience = extra.pop(0) if extra else "cti"
+            extra = ["--audience", audience]
+        result = runner.invoke(case_app, [sub, case_id, *extra])
+        if result.output:
+            console.print(result.output.rstrip())
+        if result.exit_code != 0 and result.exception:
+            console.print(f"[cp.red]ERR ▸[/cp.red] {result.exception}")
+
+    else:
+        console.print(
+            "[cp.amber]usage:[/cp.amber] /case <new|list|use|show|enrich|pivot|analyze|report>"
+        )
 
 
 async def _handle_slash(
@@ -321,18 +438,8 @@ async def _handle_slash(
     if verb == "/help":
         console.print(_SLASH_HELP)
 
-    elif verb == "/enrich":
-        if not args:
-            console.print("[cp.amber]usage:[/cp.amber] /enrich <indicator> [indicator...]")
-        else:
-            from argus.agents.ioc_agent import IOCEnrichmentAgent
-            from argus.cli.output import render_ioc_result
-            try:
-                with thinking(f"enriching {', '.join(args)}"):
-                    result: Any = await IOCEnrichmentAgent(progress=status).run(indicators=args)
-                render_ioc_result(result)
-            except Exception as exc:
-                print_agent_error(exc)
+    elif verb == "/case":
+        await _handle_case(args, session_state)
 
     elif verb == "/research":
         if not args:
@@ -358,23 +465,6 @@ async def _handle_slash(
                 with thinking(f"looking up {', '.join(args)}"):
                     result3: Any = await VulnIntelAgent(progress=status).run(cve_ids=args)
                 render_vuln_result(result3)
-            except Exception as exc:
-                print_agent_error(exc)
-
-    elif verb == "/report":
-        report_type = args[0] if args else "daily"
-        valid = ("daily", "weekly", "monthly", "yearly", "incident")
-        if report_type not in valid:
-            console.print(f"[cp.amber]usage:[/cp.amber] /report <{'|'.join(valid)}>")
-        else:
-            from argus.reports.generator import ReportGenerator
-            try:
-                with thinking(f"generating {report_type} report"):
-                    rpt = await ReportGenerator(progress=status).generate(
-                        report_type=report_type,
-                        save=False,
-                    )
-                render_markdown(rpt.content)
             except Exception as exc:
                 print_agent_error(exc)
 
@@ -476,8 +566,15 @@ async def _handle_slash(
         settings = get_settings()
         turns = getattr(orchestrator, "conversation_turns", 0)
         verbose = "on" if get_verbose() else "off"
+        active_case = (session_state or {}).get("active_case_id", "")
+        case_line = (
+            f"Active case:  [cp.cyan]{active_case}[/cp.cyan]"
+            if active_case
+            else "Active case:  [cp.dim]none  (use /case new or /case use <id>)[/cp.dim]"
+        )
         console.print(
             f"Model: [cp.cyan]{settings.model_provider} / {settings.model}[/cp.cyan]\n"
+            f"{case_line}\n"
             f"Conversation turns: [cp.cyan]{turns}[/cp.cyan]\n"
             f"Verbose logs: [cp.cyan]{verbose}[/cp.cyan]"
         )
@@ -737,7 +834,9 @@ async def _interactive_loop() -> None:
             s = get_settings()
             sid = session_state.get("id", "")
             sid_part = f"  ·  session:{sid[:8]}" if sid else ""
-            return f"  {s.model_provider}/{s.model}  ·  theme:{get_theme()}{sid_part} "
+            active_case = session_state.get("active_case_id", "")
+            case_part = f"  ·  case:{active_case[:12]}" if active_case else ""
+            return f"  {s.model_provider}/{s.model}  ·  theme:{get_theme()}{sid_part}{case_part} "
         except Exception:
             return "  argus "
 
