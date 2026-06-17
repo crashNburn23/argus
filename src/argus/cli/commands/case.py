@@ -292,7 +292,26 @@ def extract_case_artifacts(
             for evidence in evidence_items
         }
 
+        relationships = list(case.relationships)
+
         for artifact in artifacts:
+            from argus.ingestion.stix_ingestor import ingest_stix_bundle, is_stix_bundle
+            if is_stix_bundle(artifact.raw_text):
+                import json as _json
+                stix_result = ingest_stix_bundle(_json.loads(artifact.raw_text))
+                for obs in stix_result.observables:
+                    key = (obs.observable_type, obs.canonical_value or obs.value)
+                    if key not in observable_index:
+                        observables.append(obs)
+                        observable_index[key] = obs
+                        extracted_count += 1
+                for ev in stix_result.evidence:
+                    ev = ev.model_copy(update={"artifact_id": artifact.artifact_id})
+                    evidence_items.append(ev)
+                    evidence_count += 1
+                relationships.extend(stix_result.relationships)
+                continue
+
             for extracted in extract_observables(artifact.raw_text):
                 evidence_key = (
                     artifact.artifact_id,
@@ -341,7 +360,13 @@ def extract_case_artifacts(
                 evidence_index.add(evidence_key)
                 evidence_count += 1
 
-        return case.model_copy(update={"observables": observables, "evidence": evidence_items})
+        return case.model_copy(
+            update={
+                "observables": observables,
+                "evidence": evidence_items,
+                "relationships": relationships,
+            }
+        )
 
     try:
         updated = CaseStore().update(case_id, mutate)

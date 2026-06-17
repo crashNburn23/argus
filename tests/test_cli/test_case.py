@@ -198,6 +198,54 @@ def test_case_extract_creates_evidence_linked_observables() -> None:
     assert len(second_payload["evidence"]) == len(extracted_payload["evidence"])
 
 
+def test_case_extract_stix_bundle_creates_observables() -> None:
+    """STIX bundle attached as artifact should be parsed by stix_ingestor, not regex."""
+    import json as _json
+
+    runner = CliRunner()
+
+    created = runner.invoke(app, ["case", "create", "STIX test", "--json"])
+    case_id = _json.loads(created.stdout)["case_id"]
+
+    stix_bundle = _json.dumps({
+        "type": "bundle",
+        "id": "bundle--00000000-0000-0000-0000-000000000099",
+        "objects": [
+            {
+                "type": "indicator",
+                "id": "indicator--stix-test-ip",
+                "name": "Known C2",
+                "pattern": "[ipv4-addr:value = '203.0.113.42']",
+                "confidence": 85,
+            },
+            {
+                "type": "threat-actor",
+                "id": "threat-actor--apt99",
+                "name": "APT99",
+                "aliases": ["FancyWidget"],
+                "confidence": 80,
+            },
+        ],
+    })
+
+    artifact = runner.invoke(
+        app,
+        ["case", "artifact", case_id, "--text", stix_bundle, "--type", "report", "--json"],
+    )
+    assert artifact.exit_code == 0
+
+    extracted = runner.invoke(app, ["case", "extract", case_id, "--json"])
+    assert extracted.exit_code == 0
+
+    payload = _json.loads(extracted.stdout)
+    obs_values = [o["value"] for o in payload["observables"]]
+    assert "203.0.113.42" in obs_values
+
+    ev_summaries = " ".join(e["summary"] for e in payload["evidence"])
+    assert "APT99" in ev_summaries
+    assert "stix_import" in " ".join(e["source_type"] for e in payload["evidence"])
+
+
 def test_case_enrich_creates_evidence_from_mock_tools(monkeypatch) -> None:
     monkeypatch.setenv("ABUSEIPDB_API_KEY", "test-abuseipdb-key")
     from argus.config.settings import get_settings
