@@ -1,0 +1,2 @@
+"""Argus model package."""
+

@@ -13,10 +13,11 @@ from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.history import FileHistory
-from prompt_toolkit.styles import Style
+from prompt_toolkit.styles import DynamicStyle, Style
 
 from argus.cli.commands import (
     benchmark,
+    case,
     doctor,
     enrich,
     model,
@@ -139,21 +140,6 @@ def _pt_style() -> Style:
     from argus.cli.output import get_theme
     return Style.from_dict(_PT_STYLES.get(get_theme(), _PT_STYLES["analyst"]))
 
-_PROMPT_TOKENS = FormattedText([
-    ("class:argus-name",  "argus"),
-    ("class:argus-arrow", "> "),
-])
-
-
-def _make_toolbar(session_id: str = "") -> str:
-    try:
-        from argus.cli.output import get_theme
-        from argus.config.settings import get_settings
-        s = get_settings()
-        sid_part = f"  ·  session:{session_id[:8]}" if session_id else ""
-        return f"  {s.model_provider}/{s.model}  ·  theme:{get_theme()}{sid_part} "
-    except Exception:
-        return "  argus "
 
 app = typer.Typer(
     name="argus",
@@ -168,6 +154,7 @@ app.add_typer(research.app, name="research", help="Research threat actors and ca
 app.add_typer(vuln.app, name="vuln", help="Vulnerability intelligence")
 app.add_typer(triage.app, name="triage", help="Triage security alerts")
 app.add_typer(report.app, name="report", help="Generate CTI reports")
+app.add_typer(case.app, name="case", help="Manage CTI cases")
 app.add_typer(query.app, name="query", help="Natural language queries via orchestrator")
 app.add_typer(benchmark.app, name="benchmark", help="Incident response report benchmarks")
 app.command("model")(model.model_command)
@@ -314,7 +301,6 @@ _SLASH_HELP = """
 async def _handle_slash(
     cmd: str,
     orchestrator: object,
-    pt_session: PromptSession[str] | None = None,
     session_state: dict[str, Any] | None = None,
 ) -> bool:
     """Dispatch a slash command. Returns False if the session should end.
@@ -472,10 +458,6 @@ async def _handle_slash(
                 )
             else:
                 set_theme(name)
-                if pt_session is not None:
-                    pt_session.style = Style.from_dict(
-                        _PT_STYLES.get(name, _PT_STYLES["analyst"])
-                    )
                 console.print(f"[cp.green]✓[/cp.green] theme: [cp.cyan]{name}[/cp.cyan]")
 
     elif verb == "/cache":
@@ -700,67 +682,97 @@ async def _handle_slash(
     return True
 
 
+def _pt_make_style() -> Style:
+    from argus.cli.output import get_theme
+    pt = _PT_STYLES.get(get_theme(), _PT_STYLES["analyst"])
+    return Style.from_dict({
+        **pt,
+        "completion.cmd":  pt.get("completion-menu.completion", ""),
+        "completion.meta": pt.get("completion-menu.meta", "dim"),
+        "bottom-toolbar":  pt.get("bottom-toolbar", "reverse"),
+    })
+
+
 async def _interactive_loop() -> None:
     import sys
 
     from argus.agents.orchestrator import CTIOrchestrator
 
     orchestrator = CTIOrchestrator(persistent=True, progress=status)
-
-    # Session state tracking
     session_id = generate_session_id()
-    session_exchanges: list[dict[str, Any]] = []
-    session_state: dict[str, Any] = {"id": session_id, "exchanges": session_exchanges}
-
-    # Use prompt_toolkit only in a real terminal; fall back to plain input() in pipes/tests.
-    pt_session: PromptSession[str] | None = None
-    if sys.stdin.isatty():
-        console.clear()
-        history_path = Path.home() / ".argus_history"
-
-        def _toolbar() -> str:
-            return _make_toolbar(session_state.get("id", ""))
-
-        pt_session = PromptSession(
-            history=FileHistory(str(history_path)),
-            auto_suggest=AutoSuggestFromHistory(),
-            completer=_ArgusCompleter(),
-            complete_while_typing=True,
-            style=_pt_style(),
-            bottom_toolbar=_toolbar,
-        )
+    session_state: dict[str, Any] = {"id": session_id, "exchanges": []}
 
     console.print(
         "[cp.magenta]▸ ARGUS[/cp.magenta] [cp.dim]//[/cp.dim]"
         " type a question or [cp.cyan]/help[/cp.cyan] for commands"
     )
 
+    if not sys.stdin.isatty():
+        while True:
+            try:
+                line = input("argus> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                console.print()
+                break
+            if not line:
+                continue
+            if line.startswith("/"):
+                if not await _handle_slash(line, orchestrator, session_state):
+                    break
+                continue
+            try:
+                with thinking("argus is thinking"):
+                    answer = await orchestrator.run(user_query=line)
+                render_markdown(answer)
+                session_state["exchanges"].append({"role": "user", "text": line})
+                session_state["exchanges"].append({"role": "assistant", "text": answer})
+            except Exception as exc:
+                print_agent_error(exc)
+        return
+
+    def _toolbar() -> str:
+        try:
+            from argus.cli.output import get_theme
+            from argus.config.settings import get_settings
+            s = get_settings()
+            sid = session_state.get("id", "")
+            sid_part = f"  ·  session:{sid[:8]}" if sid else ""
+            return f"  {s.model_provider}/{s.model}  ·  theme:{get_theme()}{sid_part} "
+        except Exception:
+            return "  argus "
+
+    pt_session: PromptSession[str] = PromptSession(
+        completer=_ArgusCompleter(),
+        history=FileHistory(str(Path.home() / ".argus_history")),
+        style=DynamicStyle(_pt_make_style),
+        bottom_toolbar=_toolbar,
+        complete_while_typing=True,
+        auto_suggest=AutoSuggestFromHistory(),
+    )
+
+    _prompt = FormattedText([
+        ("class:argus-name", "  argus"),
+        ("class:argus-arrow", " › "),
+    ])
+
     while True:
         try:
-            if pt_session is not None:
-                line = await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: pt_session.prompt(_PROMPT_TOKENS)
-                )
-            else:
-                line = input("argus> ")
-            line = line.strip()
+            line = await pt_session.prompt_async(_prompt)
         except (EOFError, KeyboardInterrupt):
             console.print()
             break
-
+        line = line.strip()
         if not line:
             continue
-
         if line.startswith("/"):
-            if not await _handle_slash(line, orchestrator, pt_session, session_state):
+            if not await _handle_slash(line, orchestrator, session_state):
                 break
             continue
-
+        console.print(f"[cp.dim]you: {line}[/cp.dim]")
         try:
             with thinking("argus is thinking"):
                 answer = await orchestrator.run(user_query=line)
             render_markdown(answer)
-            # Track exchanges for session persistence
             session_state["exchanges"].append({"role": "user", "text": line})
             session_state["exchanges"].append({"role": "assistant", "text": answer})
         except Exception as exc:

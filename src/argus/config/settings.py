@@ -42,11 +42,16 @@ class Settings(BaseSettings):
     siem_url: str | None = None
     siem_api_key: SecretStr | None = None
     siem_log_path: str | None = None
+    # Splunk-specific
+    splunk_username: str = ""
+    splunk_password: SecretStr = SecretStr("")
+    splunk_verify_ssl: bool = False
 
     # Storage
     cache_dir: Path = Path(".cache/argus")
     cache_size_bytes: int = 1_073_741_824
     db_path: Path = Path(".data/argus.db")
+    cases_dir: Path = Path.home() / ".argus" / "cases"
 
     # Output
     reports_dir: Path = Path("reports")

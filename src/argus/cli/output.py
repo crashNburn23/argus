@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -225,7 +226,6 @@ class _ConsoleProxy:
 console = _ConsoleProxy()
 err_console = _ConsoleProxy(stderr=True)
 
-
 # ---------------------------------------------------------------------------
 # Theme management
 # ---------------------------------------------------------------------------
@@ -333,6 +333,7 @@ class _ThinkingIndicator:
     def __init__(self, message: str) -> None:
         self._message = message
         self._frame = 0
+        self._start = time.monotonic()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._live: Live | None = None
@@ -381,11 +382,15 @@ class _ThinkingIndicator:
         with self._lock:
             frame = self._frames[self._frame]
             message = self._message
+        elapsed = time.monotonic() - self._start
+        elapsed_str = f"{elapsed:.0f}s" if elapsed >= 1 else ""
         text = Text()
         text.append("⟐ ", style="cp.magenta")
         text.append(frame, style="cp.cyan")
         text.append(" ⟐", style="cp.magenta")
         text.append(f"  {message}")
+        if elapsed_str:
+            text.append(f"  {elapsed_str}", style="cp.dim")
         return text
 
 

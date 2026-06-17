@@ -7,6 +7,7 @@ import re
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from datetime import date
 from typing import Any, TypeVar
 
 import structlog
@@ -81,10 +82,11 @@ class BaseAgent(ABC):
         for iteration in range(MAX_LOOP_ITERATIONS):
             if iteration > 0:
                 self._progress(f"{self.name}: synthesizing with tool results")
+            system = f"Today's date is {date.today().isoformat()}.\n\n{self.get_system_prompt()}"
             kwargs: dict[str, Any] = {
                 "model": self.model,
                 "max_tokens": 8192,
-                "system": self.get_system_prompt(),
+                "system": system,
                 "messages": messages,
             }
             if tools:
