@@ -5,14 +5,15 @@
 > edges. Feel free to use it as inspiration for your own tooling rather than dropping it
 > straight into production.
 
-Terminal-based cyber threat intelligence harness. Ask questions in plain English or run
-commands — Argus routes to the right agents, hits your threat feeds, and comes back with
-answers.
+Terminal-based cyber threat intelligence harness built around **case workspaces**. Load
+artifacts, extract indicators, enrich them against your feeds, pivot across infrastructure,
+and generate audience-specific reports — all from a single case that keeps every piece of
+evidence and its provenance in one place.
 
 ```
-argus> Is 1.2.3.4 malicious?
-argus> What's APT29 been up to lately?
-argus> /vuln CVE-2021-44228
+argus> /case new "Log4Shell campaign"
+argus> /case use case_abc123
+argus> What threat actors are known to exploit Log4Shell?
 ```
 
 Runs on Claude or a local Ollama model. All threat-feed integrations are optional and
@@ -39,16 +40,61 @@ MODEL_PROVIDER=ollama
 OLLAMA_BASE_URL=http://localhost:11434
 
 # Optional — tools activate when keys are present
+ABUSEIPDB_API_KEY=
 VIRUSTOTAL_API_KEY=
 SHODAN_API_KEY=
 OTX_API_KEY=
-ABUSEIPDB_API_KEY=
 RECORDED_FUTURE_API_KEY=
 ```
 
-Free sources (no key needed): MITRE ATT&CK, NVD, CISA KEV, URLhaus, web search.
+Free sources (no key needed): MITRE ATT&CK, NVD, CISA KEV, URLhaus, passive DNS,
+SSL certs, WHOIS, web search.
 
-Run `argus doctor` to check what's configured and ready before you start.
+Run `argus doctor` to check what's configured before you start.
+
+## Case workflow
+
+Cases are the primary unit of work. Each case stores artifacts, extracted observables,
+enrichment evidence, pivot results, analyst notes, and generated reports.
+
+```bash
+# Create and populate a case
+argus case create "Log4Shell exploitation campaign"
+argus case artifact <id> --file siem_export.csv --type alert_export
+argus case artifact <id> --file intel.stix.json --type report
+argus case artifact <id> --text "Callback to 198.51.100.10 CVE-2021-44228" --type note
+
+# Extract observables — auto-detects STIX bundles, JSON alert arrays, CSV, and free text
+argus case extract <id>
+
+# Enrich without an LLM — routes by observable type
+# IP → AbuseIPDB + Shodan  |  Domain/URL/Hash → VirusTotal  |  CVE → NVD
+argus case enrich <id>
+argus case enrich <id> --sources abuseipdb,nvd     # limit sources
+argus case enrich <id> --min-confidence 0.7
+
+# Pivot across infrastructure (passive DNS, SSL certs, WHOIS)
+argus case pivot <id>
+argus case pivot <id> --sources passive_dns,whois
+
+# Generate a deterministic evidence report (no LLM)
+argus case report <id>
+
+# Generate an LLM-synthesised intelligence product
+# Audiences: cti  soc  vm  ir  exec  awareness  redteam
+argus case analyze <id> --audience soc
+argus case analyze <id> --audience exec --review   # grounding check after generation
+
+# Case lifecycle
+argus case list
+argus case show <id>
+argus case status <id> active    # open → active → closed
+argus case timeline <id>
+argus case note <id> "Confirmed C2 via passive DNS"
+argus case pir <id> "Which actor is behind this campaign?" --priority high
+```
+
+All commands accept `--json` for machine-readable output.
 
 ## Interactive session
 
@@ -56,65 +102,61 @@ Run `argus doctor` to check what's configured and ready before you start.
 argus
 ```
 
-Keeps conversation context across turns so follow-up questions work. Tab-completes
-slash commands. Arrow keys scroll history. Bottom bar shows active model and theme.
+Keeps conversation context across turns. Active case is shown in the bottom toolbar and
+follows you into every `/case` subcommand.
 
 **Slash commands**
 
 ```
-/enrich  <indicator...>          Enrich IPs, domains, hashes, URLs
-/research <actor or campaign>    Threat actor and campaign research
-/vuln    <CVE-ID...>             CVE intelligence
-/report  daily|weekly|incident   Generate a report
-/triage  <raw log>               Triage a raw alert
+Case
+  /case new <title>          Create a case and set it active
+  /case list                 List recent cases
+  /case use <id>             Switch active case
+  /case show                 Summary of active case
+  /case enrich [args]        Enrich active case observables
+  /case pivot [args]         Pivot active case observables
+  /case analyze [args]       LLM analysis of active case
+  /case report [args]        Deterministic report from active case
 
-/model   [name]                  Show or switch model
-/theme   [name]                  Switch colour theme (analyst/contrast/mono/midnight/nord/ember)
-/save    [title]                 Save this conversation
-/resume  <session-id>            Resume a saved conversation
-/sessions                        List saved conversations
-/sources                         Show which feeds are configured
-/runs    [N]                     Recent agent run history
-/doctor                          Config and connectivity check
-/clear                           Fresh conversation
-/help                            This list
+Research
+  /research <actor>          Threat actor and campaign research
+  /vuln <CVE>                CVE intelligence
+
+Session
+  /model   [name]            Show or switch model
+  /theme   [name]            Colour theme: analyst / midnight / nord / ember
+  /status                    Session info and active case
+  /clear                     Fresh conversation
+  /help                      This list
 ```
-
-Themes recolour the entire session history immediately so you can see the difference.
 
 ## One-shot commands
 
 ```bash
-# Enrich
-argus enrich ip 1.2.3.4
-argus enrich domain evil.com --json
-
-# Threat actors
+# Research
 argus research actor "Lazarus Group"
 argus research campaign "Operation SolarWinds"
 
-# CVEs
+# Vulnerability intelligence
 argus vuln cve CVE-2021-44228
 argus vuln search --severity critical --json
 
-# Alerts
+# Alert triage
 argus triage alerts alerts.json
 argus triage alert --raw-log "src=1.2.3.4 action=blocked"
 
-# Reports
-argus report generate daily
-argus report incident alerts.json --classification TLP:RED
+# Natural language (orchestrator)
+argus ask "What TTPs does APT29 use against financial institutions?"
 
-# Natural language
-argus ask "Summarise the ransomware landscape this week"
+# Diagnostics
+argus doctor
+argus cache stats
 ```
-
-All commands accept `--json` for machine-readable output.
 
 ## Benchmarks
 
-Eight synthetic IR tickets with known-correct decisions, ATT&CK techniques, and response
-actions. Useful for comparing models or validating changes.
+Eight synthetic IR tickets with known-correct triage decisions, ATT&CK techniques, and
+response actions. Useful for comparing models or validating changes.
 
 ```bash
 argus benchmark run --all
@@ -122,23 +164,36 @@ argus benchmark run --all --minimum-score 0.8   # non-zero exit if score drops
 argus benchmark run --all --json
 ```
 
-## How it works
+## Architecture
 
 ```
-User query
-    │
-CTIOrchestrator  (model decides which agents to call)
-    ├── IOCEnrichmentAgent   → VT, Shodan, AbuseIPDB, OTX, URLhaus
-    ├── ThreatActorAgent     → MITRE ATT&CK, OTX, Recorded Future, web
-    ├── VulnIntelAgent       → NVD, CISA KEV, Shodan
-    └── TriageAgent          → VT, AbuseIPDB, OTX, MITRE ATT&CK
+Ingestion layer (no LLM)
+  case extract
+    ├── STIX 2.x bundle     → indicators, threat actors, malware, relationships
+    ├── JSON alert array    → field-name heuristics + regex fallback
+    ├── CSV alert/IOC list  → field-name heuristics, auto-detect delimiter
+    └── Free text           → regex: IP, domain, URL, hash, CVE, ATT&CK TTP
 
-ReportAgent collects from all four in parallel and writes the narrative.
+Enrichment layer (no LLM)
+  case enrich              → AbuseIPDB, Shodan, VirusTotal, NVD
+  case pivot               → passive DNS, SSL certs, WHOIS
+
+Analysis layer (LLM)
+  case analyze             → CaseReportAgent (audience-specific narrative)
+                             └── ReviewAgent (grounding check, --review flag)
+  case report              → deterministic Markdown from stored evidence
+
+Orchestrator (interactive / one-shot queries)
+  CTIOrchestrator
+    ├── ThreatActorAgent   → MITRE ATT&CK, OTX, Recorded Future, web
+    ├── VulnIntelAgent     → NVD, CISA KEV, Shodan
+    ├── TriageAgent        → VT, AbuseIPDB, OTX, MITRE ATT&CK
+    └── siem_query         → Splunk or configured SIEM backend
 ```
 
-Each agent runs its own model tool-use loop against real APIs, then synthesises the
-results into a structured response. The orchestrator combines everything into a final
-answer.
+Each agent runs its own model tool-use loop, returns a typed Pydantic result, and stores
+a run record. The orchestrator includes a completion-verification pass that identifies
+retriable vs permanent gaps before returning.
 
 ## Development
 
@@ -148,7 +203,11 @@ uv run ruff check src tests
 uv run mypy src/argus --ignore-missing-imports
 ```
 
-CI runs all three on every push.
+CI (pre-commit hooks) runs all three on every push. Currently 133 tests.
+
+## TODO
+
+- [ ] Architecture review against harness design best practices
 
 ## License
 
