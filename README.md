@@ -205,10 +205,6 @@ uv run mypy src/argus --ignore-missing-imports
 
 CI (pre-commit hooks) runs all three on every push. Currently 133 tests.
 
-## TODO
-
-- [ ] Architecture review against harness design best practices
-
 ## License
 
 MIT © 2026 crashNburn23
