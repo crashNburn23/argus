@@ -1185,6 +1185,141 @@ def _render_case_report(
     return "\n".join(lines)
 
 
+@app.command("status")
+def update_case_status(
+    case_id: Annotated[str, typer.Argument(help="Case ID")],
+    new_status: Annotated[str, typer.Argument(help="New status: open, active, monitoring, closed")],
+    json: Annotated[bool, typer.Option("--json", "-j", help="Output as JSON")] = False,
+) -> None:
+    """Transition a case to a new status."""
+    from argus.models.case import CaseStatus
+
+    try:
+        status_val = CaseStatus(new_status)
+    except ValueError:
+        valid = ", ".join(s.value for s in CaseStatus)
+        print_error(f"Invalid status {new_status!r}. Valid: {valid}")
+        raise typer.Exit(1)
+
+    def mutate(c: Case) -> Case:
+        updates: dict[str, Any] = {"status": status_val}
+        if status_val == CaseStatus.CLOSED:
+            updates["closed_at"] = datetime.now(UTC)
+        return c.model_copy(update=updates)
+
+    try:
+        updated = CaseStore().update(case_id, mutate)
+    except CaseNotFoundError:
+        print_error(f"Case not found: {case_id}")
+        raise typer.Exit(1)
+    except CaseStoreError as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+    if json:
+        print_json(updated)
+        return
+    console.print(
+        f"[cp.green]status[/cp.green] [cp.cyan]{case_id}[/cp.cyan]"
+        f" → [cp.cyan]{new_status}[/cp.cyan]"
+    )
+
+
+@app.command("timeline")
+def show_case_timeline(
+    case_id: Annotated[str, typer.Argument(help="Case ID")],
+    json: Annotated[bool, typer.Option("--json", "-j", help="Output as JSON")] = False,
+) -> None:
+    """Show a chronological timeline of case evidence and activity."""
+    try:
+        case = CaseStore().get(case_id)
+    except CaseNotFoundError:
+        print_error(f"Case not found: {case_id}")
+        raise typer.Exit(1)
+    except CaseStoreError as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+    events: list[dict[str, Any]] = []
+
+    events.append({
+        "ts": case.created_at.isoformat(),
+        "type": "case_opened",
+        "summary": f"Case opened: {case.title}",
+    })
+    for artifact in case.artifacts:
+        art_label = artifact.title or artifact.artifact_id
+        events.append({
+            "ts": artifact.received_at.isoformat(),
+            "type": "artifact",
+            "summary": f"Artifact added: {art_label} ({artifact.artifact_type.value})",
+        })
+    for evidence in case.evidence:
+        ev_src = evidence.source_name or evidence.source_type
+        events.append({
+            "ts": evidence.collected_at.isoformat(),
+            "type": f"evidence_{evidence.status.value}",
+            "summary": f"[{evidence.status.value}] {ev_src}: {evidence.summary}",
+            "evidence_id": evidence.evidence_id,
+        })
+    for note in case.notes:
+        events.append({
+            "ts": note.created_at.isoformat(),
+            "type": "note",
+            "summary": f"Note ({note.author}): {note.body[:80]}",
+        })
+    for pir in case.pirs:
+        events.append({
+            "ts": pir.created_at.isoformat(),
+            "type": "pir_added",
+            "summary": f"PIR added: {pir.question[:80]}",
+        })
+        if pir.answered_at:
+            events.append({
+                "ts": pir.answered_at.isoformat(),
+                "type": "pir_answered",
+                "summary": f"PIR answered: {pir.question[:60]}",
+            })
+    for report in case.reports:
+        events.append({
+            "ts": report.generated_at.isoformat(),
+            "type": "report",
+            "summary": f"Report generated: {report.title} ({report.report_type})",
+        })
+
+    events.sort(key=lambda e: e["ts"])
+
+    if json:
+        print_json(events)
+        return
+
+    if not events:
+        console.print("[cp.dim]No timeline events.[/cp.dim]")
+        return
+
+    table = Table(
+        title=f"[cp.cyan]Timeline: {case.case_id}[/cp.cyan]",
+        header_style="cp.magenta",
+    )
+    table.add_column("Time", no_wrap=True, style="cp.dim")
+    table.add_column("Type")
+    table.add_column("Summary")
+    for event in events:
+        ts = event["ts"][:16].replace("T", " ")
+        event_type = event["type"]
+        color = {
+            "case_opened": "cp.green",
+            "artifact": "cp.cyan",
+            "note": "cp.amber",
+            "pir_added": "cp.magenta",
+            "pir_answered": "cp.green",
+            "report": "cp.cyan",
+        }.get(event_type, "")
+        styled_type = f"[{color}]{event_type}[/{color}]" if color else event_type
+        table.add_row(ts, styled_type, event["summary"])
+    console.print(table)
+
+
 @app.command("analyze")
 def analyze_case(
     case_id: Annotated[str, typer.Argument(help="Case ID")],
@@ -1197,6 +1332,10 @@ def analyze_case(
         ),
     ] = "cti",
     save: Annotated[bool, typer.Option("--save/--no-save", help="Attach report to case")] = True,
+    review: Annotated[
+        bool,
+        typer.Option("--review/--no-review", help="Run ReviewAgent to check grounding"),
+    ] = False,
     json: Annotated[
         bool, typer.Option("--json", "-j", help="Output report artifact as JSON")
     ] = False,
@@ -1231,6 +1370,35 @@ def analyze_case(
         from argus.cli.output import print_agent_error
         print_agent_error(exc)
         raise typer.Exit(1)
+
+    if review:
+        from argus.agents.review_agent import ReviewAgent
+        try:
+            with thinking("reviewing report grounding"):
+                review_result = asyncio.run(
+                    ReviewAgent(progress=status).review(content, case)
+                )
+            if review_result.passed:
+                console.print(
+                    f"[cp.green]✓ review passed[/cp.green] — "
+                    f"{review_result.grounded_claim_count} grounded, "
+                    f"{review_result.inferred_claim_count} inferred"
+                )
+            else:
+                console.print(
+                    f"[cp.amber]⚠ review flagged {review_result.ungrounded_claim_count} "
+                    f"unsupported claim(s)[/cp.amber]"
+                )
+                for finding in review_result.findings:
+                    sev_color = "cp.red" if finding.severity == "error" else "cp.amber"
+                    console.print(
+                        f"  [{sev_color}]{finding.severity}[/{sev_color}]"
+                        f" {finding.claim[:80]}"
+                    )
+                    console.print(f"    {finding.issue}")
+        except Exception as exc:
+            from argus.cli.output import print_agent_error
+            print_agent_error(exc)
 
     report_artifact = ReportArtifact(
         report_type=audience,
