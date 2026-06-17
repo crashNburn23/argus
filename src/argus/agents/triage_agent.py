@@ -32,7 +32,9 @@ Return your analysis as a JSON object matching AlertTriageResult:
       "decision": "true_positive|false_positive|needs_investigation",
       "risk_score": 1-10,
       "confidence": 0.0-1.0,
-      "enriched_iocs": [],
+      "enriched_iocs": [
+        {"ioc": "1.2.3.4", "type": "ip", "reputation": "malicious", "connection": "", "extra": {}}
+      ],
       "related_threat_actors": [],
       "related_techniques": ["T1566"],
       "analyst_notes": "...",
