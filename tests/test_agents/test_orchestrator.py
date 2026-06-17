@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from argus.agents.errors import AgentError, AgentFailureCategory
+from argus.agents.orchestrator import _AGENT_TOOL_DEFINITIONS, CTIOrchestrator
 from argus.llm.client import LLMResponse, TextBlock, ToolUseBlock, Usage
 
 
@@ -44,7 +45,6 @@ class FakeLLMClient:
 
 def _make_orchestrator(responses: list[FakeResponse]) -> Any:
     """Build a CTIOrchestrator with a fake LLM client, no DB/settings needed."""
-    from argus.agents.orchestrator import CTIOrchestrator, _AGENT_TOOL_DEFINITIONS
     orch = CTIOrchestrator.__new__(CTIOrchestrator)
     orch.client = FakeLLMClient(responses)
     orch.model = "fake"
