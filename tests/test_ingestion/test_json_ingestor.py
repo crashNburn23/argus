@@ -61,7 +61,10 @@ def test_ingest_sha256_from_hash_field() -> None:
     sha256 = "a" * 64
     alerts = [{"file_hash": sha256}]
     result = ingest_json_alerts(alerts)
-    assert any(o.observable_type == ObservableType.SHA256 and o.value == sha256 for o in result.observables)
+    assert any(
+        o.observable_type == ObservableType.SHA256 and o.value == sha256
+        for o in result.observables
+    )
 
 
 def test_ingest_url_from_url_field() -> None:
@@ -73,7 +76,10 @@ def test_ingest_url_from_url_field() -> None:
 def test_ingest_cve_from_cve_field() -> None:
     alerts = [{"cve_id": "CVE-2021-44228"}]
     result = ingest_json_alerts(alerts)
-    assert any(o.observable_type == ObservableType.CVE and "CVE-2021-44228" in o.value for o in result.observables)
+    assert any(
+        o.observable_type == ObservableType.CVE and "CVE-2021-44228" in o.value
+        for o in result.observables
+    )
 
 
 def test_ingest_email_from_sender_field() -> None:
