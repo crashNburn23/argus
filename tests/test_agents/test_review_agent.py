@@ -1,13 +1,13 @@
 """Tests for ReviewAgent claim-grounding checks."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from argus.agents.review_agent import ReviewAgent, ReviewFinding, ReviewResult
 from argus.models.case import Case
-from argus.models.evidence import EvidenceItem, EvidenceStatus, Observable, ObservableType
+from argus.models.evidence import EvidenceItem, EvidenceStatus
 
 
 def _make_case(evidence_summaries: list[str]) -> Case:

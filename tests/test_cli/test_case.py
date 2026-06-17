@@ -431,7 +431,11 @@ def test_case_pivot_creates_relationships_and_discovers_observables(monkeypatch)
     rel_types = {r["relationship_type"] for r in payload["relationships"]}
     assert "resolves_to" in rel_types
 
-    ev_sources = {ev["metadata"].get("pivot_source") for ev in payload["evidence"] if ev.get("metadata")}
+    ev_sources = {
+        ev["metadata"].get("pivot_source")
+        for ev in payload["evidence"]
+        if ev.get("metadata")
+    }
     assert "passive_dns" in ev_sources
     assert "whois" in ev_sources
 
