@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
 from pytest_httpx import HTTPXMock
 
-from argus.llm.client import OllamaClient, TextBlock, ToolUseBlock
+from argus.llm.client import AnthropicClient, OllamaClient, TextBlock, ToolUseBlock
 
 
 def test_ollama_converts_tools_and_tool_results() -> None:
@@ -68,3 +71,74 @@ def test_ollama_chat_response_with_tool_call(httpx_mock: HTTPXMock) -> None:
     assert response.stop_reason == "tool_use"
     assert response.content[0].name == "lookup"
     assert response.usage.input_tokens == 12
+
+
+# ---------------------------------------------------------------------------
+# AnthropicClient
+# ---------------------------------------------------------------------------
+
+def _mock_anthropic(text: str | None = None, tool_calls: list | None = None,
+                    stop_reason: str = "end_turn",
+                    input_tokens: int = 10, output_tokens: int = 20) -> AnthropicClient:
+    """Build an AnthropicClient whose SDK client is fully mocked."""
+    blocks: list[SimpleNamespace] = []
+    if text is not None:
+        blocks.append(SimpleNamespace(type="text", text=text))
+    for call in (tool_calls or []):
+        blocks.append(SimpleNamespace(type="tool_use", id=call["id"],
+                                      name=call["name"], input=call["input"]))
+
+    fake_response = SimpleNamespace(
+        content=blocks,
+        stop_reason=stop_reason,
+        usage=SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens),
+    )
+    client = AnthropicClient.__new__(AnthropicClient)
+    client._client = MagicMock()
+    client._client.messages.create = MagicMock(return_value=fake_response)
+    return client
+
+
+def test_anthropic_text_response() -> None:
+    client = _mock_anthropic(text='{"value": "ok"}')
+    response = client.create_message(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        system="You are helpful.",
+        messages=[{"role": "user", "content": "Answer."}],
+    )
+    assert response.stop_reason == "end_turn"
+    assert response.content[0].text == '{"value": "ok"}'
+    assert response.usage.input_tokens == 10
+    assert response.usage.output_tokens == 20
+
+
+def test_anthropic_tool_use_response() -> None:
+    client = _mock_anthropic(
+        tool_calls=[{"id": "t1", "name": "nvd_cve_lookup", "input": {"cve_id": "CVE-2021-44228"}}],
+        stop_reason="tool_use",
+    )
+    response = client.create_message(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        system="Use tools.",
+        messages=[{"role": "user", "content": "Look up Log4Shell."}],
+        tools=[{"name": "nvd_cve_lookup", "description": "NVD lookup",
+                "input_schema": {"type": "object", "properties": {}}}],
+    )
+    assert response.stop_reason == "tool_use"
+    assert response.content[0].name == "nvd_cve_lookup"
+    assert response.content[0].input == {"cve_id": "CVE-2021-44228"}
+
+
+def test_anthropic_forwards_kwargs_to_sdk() -> None:
+    client = _mock_anthropic(text="done")
+    client.create_message(
+        model="claude-opus-4-8",
+        max_tokens=2048,
+        system="sys",
+        messages=[{"role": "user", "content": "go"}],
+    )
+    call_kwargs = client._client.messages.create.call_args.kwargs
+    assert call_kwargs["model"] == "claude-opus-4-8"
+    assert call_kwargs["max_tokens"] == 2048
