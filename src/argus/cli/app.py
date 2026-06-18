@@ -13,6 +13,7 @@ from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.history import FileHistory
+from prompt_toolkit.patch_stdout import patch_stdout as _pt_patch_stdout
 from prompt_toolkit.styles import DynamicStyle, Style
 
 from argus.cli.commands import (
@@ -296,7 +297,8 @@ _SLASH_HELP = """
   [cp.cyan]/resume[/cp.cyan]  [cp.dim]<id>[/cp.dim]         Resume a saved session
   [cp.cyan]/runs[/cp.cyan]    [cp.dim][N][/cp.dim]           Last N agent runs (default 10)
   [cp.cyan]/sources[/cp.cyan]                Source availability
-  [cp.cyan]/cancel[/cp.cyan]                 How to cancel a running query (Ctrl-C)
+  [cp.cyan]/jobs[/cp.cyan]                   List active background investigations
+  [cp.cyan]/cancel[/cp.cyan]                 Cancel the most recent running investigation
   [cp.cyan]/help[/cp.cyan]                   This message
   [cp.cyan]/exit[/cp.cyan] [cp.dim]or[/cp.dim] [cp.cyan]/quit[/cp.cyan]   Close session
 
@@ -416,16 +418,97 @@ async def _handle_case(args: list[str], session_state: dict[str, Any] | None) ->
         )
 
 
+# ---------------------------------------------------------------------------
+# Background task helpers
+# ---------------------------------------------------------------------------
+
+_ActiveTasks = list[tuple[str, "asyncio.Task[str]"]]
+
+
+def _drain_completed(
+    active_tasks: _ActiveTasks,
+    session_state: dict[str, Any],
+) -> None:
+    """Print results for any finished background tasks and remove them from the list."""
+    for item in list(active_tasks):
+        q, t = item
+        if not t.done():
+            continue
+        active_tasks.remove(item)
+        try:
+            answer = t.result()
+        except asyncio.CancelledError:
+            console.print(f"[cp.dim]← cancelled: {q[:60]}[/cp.dim]")
+            continue
+        except Exception as exc:
+            print_agent_error(exc)
+            continue
+        console.print(f"\n[cp.dim]← {q[:70]}{'…' if len(q) > 70 else ''}[/cp.dim]")
+        render_markdown(answer)
+        session_state["exchanges"].append({"role": "user", "text": q})
+        session_state["exchanges"].append({"role": "assistant", "text": answer})
+
+
+async def _classify_mid_run_input(new_text: str, active_query: str) -> str:
+    """Return 'extend' (related follow-up) or 'background' (independent query).
+
+    Uses a fast heuristic first, then a cheap single-token LLM call for ambiguous cases.
+    """
+    low = new_text.lower().strip()
+    extend_starters = ("also ", "and ", "what about", "additionally", "plus ", "add ", "include ")
+    if any(low.startswith(h) for h in extend_starters):
+        return "extend"
+    if len(new_text.split()) <= 3:
+        return "extend"
+
+    try:
+        from argus.config.settings import get_settings
+        from argus.llm.client import AnthropicClient, OllamaClient
+        s = get_settings()
+        loop = asyncio.get_running_loop()
+
+        def _call() -> str:
+            client: Any
+            if s.model_provider == "anthropic":
+                client = AnthropicClient(api_key=s.api_key("anthropic"))
+            else:
+                client = OllamaClient(s.ollama_base_url, s.ollama_timeout_seconds)
+            resp = client.create_message(
+                model=s.model,
+                max_tokens=5,
+                system=(
+                    "Classify user messages in one word. "
+                    "Reply 'extend' if the new message refines or adds context to the active "
+                    "investigation. Reply 'background' if it is a separate, independent request."
+                ),
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        f"Active investigation: {active_query[:200]}\n"
+                        f"New message: {new_text[:200]}"
+                    ),
+                }],
+            )
+            text = resp.content[0].text.strip().lower() if resp.content else "background"
+            return "extend" if text.startswith("extend") else "background"
+
+        return await loop.run_in_executor(None, _call)
+    except Exception:
+        return "background"
+
+
 async def _handle_slash(
     cmd: str,
     orchestrator: object,
     session_state: dict[str, Any] | None = None,
+    active_tasks: _ActiveTasks | None = None,
 ) -> bool:
     """Dispatch a slash command. Returns False if the session should end.
 
     session_state is a mutable dict with keys:
         id: str — current session ID
         exchanges: list[dict] — accumulated user/assistant exchanges
+    active_tasks is the list of background (query, Task) pairs from _interactive_loop.
     """
     parts = shlex.split(cmd) if cmd.strip() else []
     if not parts:
@@ -775,11 +858,20 @@ async def _handle_slash(
             console.print(f"[red]Error querying sources:[/red] {exc}")
 
     elif verb == "/cancel":
-        # Ctrl-C during a query cancels the agent naturally; /cancel is for discoverability.
-        console.print(
-            "[cp.dim]To cancel a running query, press [/cp.dim][cp.cyan]Ctrl-C[/cp.cyan]"
-            "[cp.dim]. The session will continue and completed work is kept.[/cp.dim]"
-        )
+        if not active_tasks:
+            console.print("[cp.dim]No active investigations to cancel.[/cp.dim]")
+        else:
+            cancel_q, cancel_task = active_tasks[-1]
+            cancel_task.cancel()
+            console.print(f"[cp.dim]Cancelling: {cancel_q[:70]}[/cp.dim]")
+
+    elif verb == "/jobs":
+        if not active_tasks:
+            console.print("[cp.dim]No active investigations.[/cp.dim]")
+        else:
+            for i, (job_q, job_task) in enumerate(active_tasks, 1):
+                state = "[cp.dim]done[/cp.dim]" if job_task.done() else "[cp.cyan]running[/cp.cyan]"
+                console.print(f"  [cp.cyan]{i}.[/cp.cyan] {state}  {job_q[:70]}")
 
     else:
         console.print(f"[cp.amber]unknown command:[/cp.amber] {verb}  [cp.dim](try /help)[/cp.dim]")
@@ -888,6 +980,11 @@ async def _interactive_loop() -> None:
                 print_agent_error(exc)
         return
 
+    # Background task state: (query, Task) pairs running concurrently.
+    active_tasks: _ActiveTasks = []
+    # Extend queue: follow-up messages classified as related to the active investigation.
+    extend_queue: list[str] = []
+
     def _toolbar() -> str:
         try:
             from argus.cli.output import get_theme
@@ -899,9 +996,11 @@ async def _interactive_loop() -> None:
             case_part = f"  ·  case:{active_case[:12]}" if active_case else ""
             mode = s.disclosure_mode
             mode_part = f"  ·  {mode}" if mode != "unrestricted" else ""
+            n_running = sum(1 for _, t in active_tasks if not t.done())
+            running_part = f"  ·  [{n_running} running]" if n_running else ""
             return (
                 f"  {s.model_provider}/{s.model}  ·  theme:{get_theme()}"
-                f"{mode_part}{sid_part}{case_part} "
+                f"{mode_part}{running_part}{sid_part}{case_part} "
             )
         except Exception:
             return "  argus "
@@ -920,42 +1019,89 @@ async def _interactive_loop() -> None:
         ("class:argus-arrow", " › "),
     ])
 
-    while True:
-        try:
-            line = await pt_session.prompt_async(_prompt)
-        except (EOFError, KeyboardInterrupt):
-            console.print()
-            break
-        line = line.strip()
-        if not line:
-            continue
-        if line.startswith("/"):
-            if not await _handle_slash(line, orchestrator, session_state):
-                break
-            continue
-        console.print(f"[cp.dim]you: {line}[/cp.dim]")
-        try:
-            from argus.config.settings import get_settings
-            if get_settings().disclosure_mode == "confirm-external":
-                confirmed = await pt_session.prompt_async(
-                    FormattedText([
-                        ("class:argus-arrow", "  Send query to "),
-                        ("class:argus-name", get_settings().model_provider),
-                        ("class:argus-arrow", "? [y/N] "),
-                    ])
+    with _pt_patch_stdout():
+        while True:
+            # Display any completed background tasks before showing the prompt.
+            _drain_completed(active_tasks, session_state)
+
+            # If the extend queue has entries and nothing is running, launch the next one.
+            if extend_queue and not any(not t.done() for _, t in active_tasks):
+                nq = extend_queue.pop(0)
+                t = asyncio.create_task(orchestrator.run(user_query=nq))
+                active_tasks.append((nq, t))
+                console.print(f"[cp.cyan]⟳[/cp.cyan] [cp.dim]follow-up: {nq[:60]}[/cp.dim]")
+
+            # Prompt — poll every 500 ms so completed tasks surface without user input.
+            try:
+                prompt_task: asyncio.Task[str] = asyncio.create_task(
+                    pt_session.prompt_async(_prompt)
                 )
-                if confirmed.strip().lower() not in {"y", "yes"}:
-                    console.print("[cp.dim]Cancelled.[/cp.dim]")
-                    continue
-            with thinking("argus is thinking"):
-                answer = await orchestrator.run(user_query=line)
-            render_markdown(answer)
-            session_state["exchanges"].append({"role": "user", "text": line})
-            session_state["exchanges"].append({"role": "assistant", "text": answer})
-        except (KeyboardInterrupt, asyncio.CancelledError):
-            console.print("\n[cp.dim]Cancelled — session continues.[/cp.dim]")
-        except Exception as exc:
-            print_agent_error(exc)
+                while True:
+                    done, _ = await asyncio.wait({prompt_task}, timeout=0.5)
+                    _drain_completed(active_tasks, session_state)
+                    if done:
+                        break
+                line = await prompt_task
+            except (EOFError, KeyboardInterrupt):
+                console.print()
+                for _, t in active_tasks:
+                    t.cancel()
+                break
+
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.startswith("/"):
+                if not await _handle_slash(line, orchestrator, session_state, active_tasks):
+                    break
+                continue
+
+            console.print(f"[cp.dim]you: {line}[/cp.dim]")
+
+            # Disclosure-mode confirmation (non-blocking — still inside patch_stdout).
+            try:
+                from argus.config.settings import get_settings
+                if get_settings().disclosure_mode == "confirm-external":
+                    confirmed = await pt_session.prompt_async(
+                        FormattedText([
+                            ("class:argus-arrow", "  Send query to "),
+                            ("class:argus-name", get_settings().model_provider),
+                            ("class:argus-arrow", "? [y/N] "),
+                        ])
+                    )
+                    if confirmed.strip().lower() not in {"y", "yes"}:
+                        console.print("[cp.dim]Cancelled.[/cp.dim]")
+                        continue
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                console.print("[cp.dim]Cancelled.[/cp.dim]")
+                continue
+
+            # Classify new input when an investigation is already running.
+            if any(not t.done() for _, t in active_tasks):
+                active_query = next(q for q, t in active_tasks if not t.done())
+                console.print("[cp.dim]classifying...[/cp.dim]")
+                action = await _classify_mid_run_input(line, active_query)
+                if action == "extend":
+                    extend_queue.append(line)
+                    console.print(
+                        "[cp.cyan]↳[/cp.cyan] [cp.dim]Related — queued as follow-up "
+                        "to the current investigation.[/cp.dim]"
+                    )
+                else:
+                    t = asyncio.create_task(orchestrator.run(user_query=line))
+                    active_tasks.append((line, t))
+                    n = sum(1 for _, t2 in active_tasks if not t2.done())
+                    console.print(
+                        f"[cp.amber]⊕[/cp.amber] [cp.dim]Independent — running in parallel "
+                        f"({n} active).[/cp.dim]"
+                    )
+                continue
+
+            # No active tasks — launch normally.
+            t = asyncio.create_task(orchestrator.run(user_query=line))
+            active_tasks.append((line, t))
+            console.print("[cp.cyan]⟳[/cp.cyan] [cp.dim]investigating...[/cp.dim]")
 
 
 def run_interactive() -> None:
