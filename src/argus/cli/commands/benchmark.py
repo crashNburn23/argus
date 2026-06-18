@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json as json_lib
 import time
 from pathlib import Path
 from typing import Annotated, Any
@@ -71,6 +72,14 @@ def run_live_cases(
         float,
         typer.Option("--minimum-score", help="Fail when aggregate score is below this value"),
     ] = 0.0,
+    save_baseline: Annotated[
+        Path | None,
+        typer.Option("--save-baseline", help="Save run results as a baseline JSON file"),
+    ] = None,
+    compare: Annotated[
+        Path | None,
+        typer.Option("--compare", help="Compare results against a saved baseline JSON file"),
+    ] = None,
 ) -> None:
     """Generate and score incident reports using the configured model."""
     if bool(case_id) == all_cases:
@@ -79,6 +88,21 @@ def run_live_cases(
     if not 0.0 <= minimum_score <= 1.0:
         print_error("--minimum-score must be between 0.0 and 1.0.")
         raise typer.Exit(2)
+    if compare is not None and not compare.exists():
+        print_error(f"Baseline file not found: {compare}")
+        raise typer.Exit(2)
+
+    baseline: dict[str, Any] = {}
+    if compare is not None:
+        try:
+            baseline = json_lib.loads(compare.read_text())
+        except Exception as exc:
+            print_error(f"Could not load baseline: {exc}")
+            raise typer.Exit(2)
+
+    baseline_by_case: dict[str, float] = {
+        r["case_id"]: r["score"] for r in baseline.get("results", [])
+    }
 
     cases = load_incident_cases() if all_cases else [get_incident_case(case_id or "")]
 
@@ -108,7 +132,30 @@ def run_live_cases(
         average = sum(item["evaluation"].score for item in completed) / len(completed)
         settings = get_settings()
         passed = average >= minimum_score
-        payload = {
+        baseline_average: float | None = baseline.get("average_score")
+
+        results_payload = [
+            {
+                **item["evaluation"].model_dump(),
+                "duration_seconds": item["duration_seconds"],
+                "report_path": item["report_path"],
+                **(
+                    {
+                        "baseline_score": baseline_by_case.get(item["evaluation"].case_id),
+                        "score_delta": (
+                            item["evaluation"].score
+                            - baseline_by_case[item["evaluation"].case_id]
+                        )
+                        if item["evaluation"].case_id in baseline_by_case
+                        else None,
+                    }
+                    if baseline_by_case
+                    else {}
+                ),
+            }
+            for item in completed
+        ]
+        payload: dict[str, Any] = {
             "model_provider": settings.model_provider,
             "model": settings.model,
             "case_count": len(completed),
@@ -116,45 +163,74 @@ def run_live_cases(
             "duration_seconds": time.monotonic() - start,
             "minimum_score": minimum_score,
             "passed": passed,
-            "results": [
-                {
-                    **item["evaluation"].model_dump(),
-                    "duration_seconds": item["duration_seconds"],
-                    "report_path": item["report_path"],
-                }
-                for item in completed
-            ],
+            "results": results_payload,
         }
+        if baseline_average is not None:
+            payload["baseline_score"] = baseline_average
+            payload["score_delta"] = average - baseline_average
+            payload["baseline_model"] = baseline.get("model", "unknown")
+
+        if save_baseline is not None:
+            try:
+                save_baseline.write_text(json_lib.dumps(payload, indent=2))
+                if not json:
+                    console.print(f"[dim]Baseline saved → {save_baseline}[/dim]")
+            except Exception as exc:
+                print_error(f"Could not save baseline: {exc}")
+
         if json:
             print_json(payload)
         else:
             table = Table(title="Benchmark Results")
             table.add_column("Case")
             table.add_column("Score", justify="right")
+            if baseline_by_case:
+                table.add_column("Delta", justify="right")
             table.add_column("Decision")
             table.add_column("Missing")
             table.add_column("Duration", justify="right")
-            for item in completed:
+            for item, result_row in zip(completed, results_payload):
                 result = item["evaluation"]
                 missing = (
                     len(result.techniques_missing)
                     + len(result.findings_missing)
                     + len(result.actions_missing)
                 )
-                table.add_row(
+                row = [
                     result.case_id,
                     f"{result.score:.0%}",
+                ]
+                if baseline_by_case:
+                    delta = result_row.get("score_delta")
+                    if delta is None:
+                        row.append("n/a")
+                    elif delta > 0.005:
+                        row.append(f"[green]+{delta:.0%}[/green]")
+                    elif delta < -0.005:
+                        row.append(f"[red]{delta:.0%}[/red]")
+                    else:
+                        row.append("–")
+                row += [
                     "match" if result.decision_match else "miss",
                     str(missing),
                     f"{item['duration_seconds']:.1f}s",
-                )
+                ]
+                table.add_row(*row)
             console.print(table)
             status = "PASS" if passed else "FAIL"
-            console.print(
+            aggregate_line = (
                 f"[bold]Aggregate:[/bold] {average:.0%}  "
                 f"[bold]Threshold:[/bold] {minimum_score:.0%}  "
                 f"[bold]{status}[/bold]"
             )
+            if baseline_average is not None:
+                delta_sign = "+" if average >= baseline_average else ""
+                aggregate_line += (
+                    f"  [bold]vs baseline:[/bold] {delta_sign}"
+                    f"{average - baseline_average:.0%} "
+                    f"(baseline {baseline_average:.0%} on {baseline.get('model', '?')})"
+                )
+            console.print(aggregate_line)
             console.print(f"[dim]{settings.model_provider} / {settings.model}[/dim]")
         if not passed:
             raise typer.Exit(1)

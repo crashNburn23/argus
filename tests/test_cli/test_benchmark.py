@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, patch
 
 from typer.testing import CliRunner
@@ -65,3 +66,83 @@ def test_benchmark_run_all_outputs_ci_summary(tmp_path) -> None:
     assert result.exit_code == 0
     assert '"case_count": 8' in result.stdout
     assert '"passed": true' in result.stdout
+
+
+def _make_perfect_generator() -> AsyncMock:
+    generator = ReportGenerator()
+
+    async def generate_case(*, title, **kwargs):
+        case = get_incident_case(title.split(":", 1)[0])
+        report = build_expected_report(case)
+        report.content = generator.render(report)
+        return report
+
+    return AsyncMock(side_effect=generate_case)
+
+
+def test_benchmark_save_baseline_writes_file(tmp_path) -> None:
+    baseline_path = tmp_path / "baseline.json"
+
+    with patch(
+        "argus.cli.commands.benchmark.ReportGenerator.generate_incident_from_alerts",
+        new=_make_perfect_generator(),
+    ):
+        result = CliRunner().invoke(
+            app,
+            [
+                "benchmark", "run", "--all",
+                "--output-dir", str(tmp_path),
+                "--save-baseline", str(baseline_path),
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert baseline_path.exists()
+    saved = json.loads(baseline_path.read_text())
+    assert saved["case_count"] == 8
+    assert saved["average_score"] == 1.0
+    assert len(saved["results"]) == 8
+
+
+def test_benchmark_compare_baseline_shows_delta(tmp_path) -> None:
+    baseline = {
+        "model": "test-model",
+        "average_score": 0.5,
+        "results": [
+            {"case_id": f"IR-{i:04d}", "score": 0.5}
+            for i in range(1, 9)
+        ],
+    }
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(baseline))
+
+    with patch(
+        "argus.cli.commands.benchmark.ReportGenerator.generate_incident_from_alerts",
+        new=_make_perfect_generator(),
+    ):
+        result = CliRunner().invoke(
+            app,
+            [
+                "benchmark", "run", "--all", "--json",
+                "--output-dir", str(tmp_path),
+                "--compare", str(baseline_path),
+            ],
+        )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["baseline_score"] == 0.5
+    assert abs(payload["score_delta"] - 0.5) < 0.01
+    assert payload["results"][0]["score_delta"] is not None
+
+
+def test_benchmark_compare_missing_baseline_exits(tmp_path) -> None:
+    result = CliRunner().invoke(
+        app,
+        [
+            "benchmark", "run", "--all",
+            "--compare", str(tmp_path / "nonexistent.json"),
+        ],
+    )
+
+    assert result.exit_code == 2
