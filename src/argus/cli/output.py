@@ -591,16 +591,65 @@ def render_triage_result(result: Any, as_json: bool = False) -> None:
 
     for ta in sorted(result.triaged_alerts, key=lambda x: x.risk_score, reverse=True)[:10]:
         ts = _ts(str(ta.decision))
+        decision_label = str(ta.decision).replace("_", " ").upper()
+        confidence_pct = f"{ta.confidence:.0%}" if ta.confidence > 0 else "—"
         title = (
-            f"[{ts}]{str(ta.decision).upper()}[/{ts}]"
+            f"[{ts}]{decision_label}[/{ts}]"
             f"  [cp.dim]alert {ta.alert.alert_id}[/cp.dim]"
             f"  [cp.cyan]risk {ta.risk_score}/10[/cp.cyan]"
+            f"  [cp.dim]confidence {confidence_pct}[/cp.dim]"
         )
-        body = ta.analyst_notes or "[cp.dim]No notes.[/cp.dim]"
-        if ta.recommended_actions:
-            body += "\n" + "\n".join(
-                f"[cp.magenta]▸[/cp.magenta] {a}" for a in ta.recommended_actions
+
+        lines: list[str] = []
+
+        # Evidence: network context from the alert
+        evidence_parts: list[str] = []
+        if ta.alert.source_ip:
+            evidence_parts.append(f"src {ta.alert.source_ip}")
+        if ta.alert.dest_ip:
+            evidence_parts.append(f"dst {ta.alert.dest_ip}")
+        if ta.alert.timestamp:
+            evidence_parts.append(ta.alert.timestamp.strftime("%Y-%m-%d %H:%M UTC"))
+        if ta.alert.rule_name:
+            evidence_parts.append(f"rule: {ta.alert.rule_name}")
+        if evidence_parts:
+            lines.append("[cp.dim]Evidence:[/cp.dim] " + "  ·  ".join(evidence_parts))
+
+        # Enriched IOCs
+        if ta.enriched_iocs:
+            ioc_parts = []
+            for ioc in ta.enriched_iocs[:5]:
+                rep = f" [{ioc.reputation}]" if ioc.reputation else ""
+                ioc_parts.append(f"{ioc.ioc}{rep}")
+            if len(ta.enriched_iocs) > 5:
+                ioc_parts.append(f"…+{len(ta.enriched_iocs) - 5} more")
+            lines.append("[cp.dim]IOCs:[/cp.dim] " + "  ·  ".join(ioc_parts))
+
+        # ATT&CK techniques
+        if ta.related_techniques:
+            lines.append(
+                "[cp.dim]Techniques:[/cp.dim] " + "  ".join(ta.related_techniques[:8])
             )
+
+        # Threat actors
+        if ta.related_threat_actors:
+            lines.append(
+                "[cp.dim]Actors:[/cp.dim] " + ", ".join(ta.related_threat_actors[:4])
+            )
+
+        # Why: analyst reasoning
+        if ta.analyst_notes:
+            lines.append("")
+            lines.append("[cp.dim]Why:[/cp.dim] " + ta.analyst_notes)
+
+        # Actions
+        if ta.recommended_actions:
+            lines.append("")
+            lines.append("[cp.dim]Actions:[/cp.dim]")
+            for action in ta.recommended_actions:
+                lines.append(f"  [cp.magenta]▸[/cp.magenta] {action}")
+
+        body = "\n".join(lines) if lines else "[cp.dim]No details available.[/cp.dim]"
         console.print(Panel(body, title=title, border_style=ts))
 
 
