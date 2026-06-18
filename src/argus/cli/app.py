@@ -790,6 +790,26 @@ def _pt_make_style() -> Style:
     })
 
 
+def _show_disclosure_warning() -> None:
+    """Warn when a restricted disclosure mode is active."""
+    from argus.config.settings import get_settings
+    try:
+        s = get_settings()
+    except Exception:
+        return
+    if s.disclosure_mode == "local-only" and s.model_provider != "ollama":
+        console.print(
+            "[yellow]⚠ DATA_DISCLOSURE_MODE=local-only but model provider is "
+            f"'{s.model_provider}' — data will be sent to an external hosted API. "
+            "Switch to Ollama or set DATA_DISCLOSURE_MODE=unrestricted.[/yellow]"
+        )
+    elif s.disclosure_mode == "confirm-external":
+        console.print(
+            "[cp.dim]Data-disclosure mode: confirm-external — "
+            "you will be prompted before each agent run.[/cp.dim]"
+        )
+
+
 def _show_first_run_guidance() -> None:
     """Detect missing model configuration and show setup guidance."""
     from argus.diagnostics import run_diagnostics
@@ -799,6 +819,7 @@ def _show_first_run_guidance() -> None:
         return
     model_check = next((c for c in result.checks if c.category == "model"), None)
     if model_check and model_check.status != "failed":
+        _show_disclosure_warning()
         return
     console.print(
         "\n[cp.magenta]▸ First-run setup[/cp.magenta]\n"
@@ -866,7 +887,12 @@ async def _interactive_loop() -> None:
             sid_part = f"  ·  session:{sid[:8]}" if sid else ""
             active_case = session_state.get("active_case_id", "")
             case_part = f"  ·  case:{active_case[:12]}" if active_case else ""
-            return f"  {s.model_provider}/{s.model}  ·  theme:{get_theme()}{sid_part}{case_part} "
+            mode = s.disclosure_mode
+            mode_part = f"  ·  {mode}" if mode != "unrestricted" else ""
+            return (
+                f"  {s.model_provider}/{s.model}  ·  theme:{get_theme()}"
+                f"{mode_part}{sid_part}{case_part} "
+            )
         except Exception:
             return "  argus "
 
@@ -899,6 +925,18 @@ async def _interactive_loop() -> None:
             continue
         console.print(f"[cp.dim]you: {line}[/cp.dim]")
         try:
+            from argus.config.settings import get_settings
+            if get_settings().disclosure_mode == "confirm-external":
+                confirmed = await pt_session.prompt_async(
+                    FormattedText([
+                        ("class:argus-arrow", "  Send query to "),
+                        ("class:argus-name", get_settings().model_provider),
+                        ("class:argus-arrow", "? [y/N] "),
+                    ])
+                )
+                if confirmed.strip().lower() not in {"y", "yes"}:
+                    console.print("[cp.dim]Cancelled.[/cp.dim]")
+                    continue
             with thinking("argus is thinking"):
                 answer = await orchestrator.run(user_query=line)
             render_markdown(answer)

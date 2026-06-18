@@ -111,3 +111,52 @@ def test_siem_unsupported_type(monkeypatch) -> None:
     check = _siem_check(monkeypatch, SIEM_TYPE="elastic")
     assert check.status == "misconfigured"
     assert "elastic" in check.detail
+
+
+# ---------------------------------------------------------------------------
+# Disclosure mode diagnostics
+# ---------------------------------------------------------------------------
+
+def _disclosure_check(monkeypatch, **env_vars) -> dict:
+    for key, value in env_vars.items():
+        monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
+    settings = get_settings()
+    from argus.diagnostics import _disclosure_check as _dc
+    return _dc(settings)
+
+
+def test_disclosure_unrestricted_is_ready(monkeypatch) -> None:
+    check = _disclosure_check(monkeypatch, DISCLOSURE_MODE="unrestricted")
+    assert check.status == "ready"
+
+
+def test_disclosure_confirm_external_is_configured(monkeypatch) -> None:
+    check = _disclosure_check(monkeypatch, DISCLOSURE_MODE="confirm-external")
+    assert check.status == "configured"
+    assert "prompt" in check.detail.lower()
+
+
+def test_disclosure_local_only_with_ollama_is_configured(monkeypatch) -> None:
+    check = _disclosure_check(
+        monkeypatch,
+        DISCLOSURE_MODE="local-only",
+        MODEL_PROVIDER="ollama",
+    )
+    assert check.status == "configured"
+
+
+def test_disclosure_local_only_with_anthropic_warns(monkeypatch) -> None:
+    check = _disclosure_check(
+        monkeypatch,
+        DISCLOSURE_MODE="local-only",
+        MODEL_PROVIDER="anthropic",
+    )
+    assert check.status == "warning"
+    assert "anthropic" in check.detail
+
+
+def test_doctor_includes_disclosure_check(monkeypatch) -> None:
+    result = CliRunner().invoke(app, ["doctor", "--json", "--no-connectivity"])
+    payload = json.loads(result.stdout)
+    assert any(c["name"] == "data-disclosure" for c in payload["checks"])

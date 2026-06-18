@@ -172,9 +172,32 @@ def _source_checks(settings: Settings) -> list[DiagnosticCheck]:
     return checks
 
 
+def _disclosure_check(settings: Settings) -> DiagnosticCheck:
+    mode = settings.disclosure_mode
+    if mode == "local-only" and settings.model_provider != "ollama":
+        status, detail = (
+            "warning",
+            f"local-only mode set but model provider is '{settings.model_provider}' "
+            "(data will leave the machine). Switch to Ollama or change mode.",
+        )
+    elif mode == "confirm-external":
+        status, detail = "configured", "confirm-external: user prompted before each agent run"
+    elif mode == "local-only":
+        status, detail = "configured", "local-only: Ollama confirmed, no external model calls"
+    else:
+        status, detail = "ready", "unrestricted: data sent to configured model and sources"
+    return DiagnosticCheck(
+        category="disclosure",
+        name="data-disclosure",
+        status=status,
+        detail=detail,
+    )
+
+
 def run_diagnostics(check_connectivity: bool = True) -> DiagnosticResult:
     settings = get_settings()
     checks = [
+        _disclosure_check(settings),
         *_model_checks(settings, check_connectivity),
         _writable_check("Cache directory", settings.cache_dir),
         _writable_check("Database", settings.db_path),

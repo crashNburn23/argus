@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     reports_dir: Path = Path("reports")
     log_level: str = "INFO"
 
+    # Data-disclosure mode:
+    #   unrestricted    — data sent to configured model + all enabled external feeds
+    #   confirm-external — prompt before each agent run that sends data externally
+    #   local-only      — warn if model_provider is not 'ollama'; no external enrichment
+    disclosure_mode: Literal["unrestricted", "confirm-external", "local-only"] = "unrestricted"
+
     def api_key(self, name: str) -> str:
         key_map = {
             "virustotal": self.virustotal_api_key,
