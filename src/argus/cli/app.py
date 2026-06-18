@@ -296,6 +296,7 @@ _SLASH_HELP = """
   [cp.cyan]/resume[/cp.cyan]  [cp.dim]<id>[/cp.dim]         Resume a saved session
   [cp.cyan]/runs[/cp.cyan]    [cp.dim][N][/cp.dim]           Last N agent runs (default 10)
   [cp.cyan]/sources[/cp.cyan]                Source availability
+  [cp.cyan]/cancel[/cp.cyan]                 How to cancel a running query (Ctrl-C)
   [cp.cyan]/help[/cp.cyan]                   This message
   [cp.cyan]/exit[/cp.cyan] [cp.dim]or[/cp.dim] [cp.cyan]/quit[/cp.cyan]   Close session
 
@@ -773,6 +774,13 @@ async def _handle_slash(
         except Exception as exc:
             console.print(f"[red]Error querying sources:[/red] {exc}")
 
+    elif verb == "/cancel":
+        # Ctrl-C during a query cancels the agent naturally; /cancel is for discoverability.
+        console.print(
+            "[cp.dim]To cancel a running query, press [/cp.dim][cp.cyan]Ctrl-C[/cp.cyan]"
+            "[cp.dim]. The session will continue and completed work is kept.[/cp.dim]"
+        )
+
     else:
         console.print(f"[cp.amber]unknown command:[/cp.amber] {verb}  [cp.dim](try /help)[/cp.dim]")
 
@@ -874,6 +882,8 @@ async def _interactive_loop() -> None:
                 render_markdown(answer)
                 session_state["exchanges"].append({"role": "user", "text": line})
                 session_state["exchanges"].append({"role": "assistant", "text": answer})
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                console.print("\n[cp.dim]Cancelled.[/cp.dim]")
             except Exception as exc:
                 print_agent_error(exc)
         return
@@ -942,6 +952,8 @@ async def _interactive_loop() -> None:
             render_markdown(answer)
             session_state["exchanges"].append({"role": "user", "text": line})
             session_state["exchanges"].append({"role": "assistant", "text": answer})
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            console.print("\n[cp.dim]Cancelled — session continues.[/cp.dim]")
         except Exception as exc:
             print_agent_error(exc)
 
