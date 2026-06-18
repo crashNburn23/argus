@@ -790,11 +790,41 @@ def _pt_make_style() -> Style:
     })
 
 
+def _show_first_run_guidance() -> None:
+    """Detect missing model configuration and show setup guidance."""
+    from argus.diagnostics import run_diagnostics
+    try:
+        result = run_diagnostics(check_connectivity=False)
+    except Exception:
+        return
+    model_check = next((c for c in result.checks if c.category == "model"), None)
+    if model_check and model_check.status != "failed":
+        return
+    console.print(
+        "\n[cp.magenta]▸ First-run setup[/cp.magenta]\n"
+        "\nNo model is configured. Choose a path:\n\n"
+        "  [cp.cyan]Offline / benchmark only[/cp.cyan]\n"
+        "    No keys needed — inspect built-in incident cases:\n"
+        "    [cp.dim]argus benchmark list[/cp.dim]\n"
+        "    [cp.dim]argus benchmark render --case IR-0001[/cp.dim]\n\n"
+        "  [cp.cyan]Local model (Ollama)[/cp.cyan]\n"
+        "    1. Install Ollama: https://ollama.com\n"
+        "    2. Pull a model:  [cp.dim]ollama pull qwen3:8b[/cp.dim]\n"
+        "    3. Select it:     [cp.dim]argus model qwen3:8b --provider ollama[/cp.dim]\n\n"
+        "  [cp.cyan]Hosted model (Anthropic)[/cp.cyan]\n"
+        "    1. Add key to .env:  [cp.dim]ANTHROPIC_API_KEY=sk-ant-...[/cp.dim]\n"
+        "    2. Select model:     "
+        "[cp.dim]argus model claude-sonnet-4-6 --provider anthropic[/cp.dim]\n\n"
+        "  Run [cp.cyan]argus doctor[/cp.cyan] at any time to check configuration.\n"
+    )
+
+
 async def _interactive_loop() -> None:
     import sys
 
     from argus.agents.orchestrator import CTIOrchestrator
 
+    _show_first_run_guidance()
     orchestrator = CTIOrchestrator(persistent=True, progress=status)
     session_id = generate_session_id()
     session_state: dict[str, Any] = {"id": session_id, "exchanges": []}
