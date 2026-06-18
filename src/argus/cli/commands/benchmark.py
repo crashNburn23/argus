@@ -68,6 +68,7 @@ def run_live_cases(
     ] = False,
     output_dir: Annotated[Path, typer.Option("--output-dir", "-o")] = Path("benchmark-reports"),
     json: Annotated[bool, typer.Option("--json", "-j")] = False,
+    jsonl: Annotated[bool, typer.Option("--jsonl")] = False,
     minimum_score: Annotated[
         float,
         typer.Option("--minimum-score", help="Fail when aggregate score is below this value"),
@@ -82,6 +83,9 @@ def run_live_cases(
     ] = None,
 ) -> None:
     """Generate and score incident reports using the configured model."""
+    if json and jsonl:
+        print_error("Use --json or --jsonl, not both.")
+        raise typer.Exit(2)
     if bool(case_id) == all_cases:
         print_error("Provide one CASE_ID or use --all.")
         raise typer.Exit(2)
@@ -178,7 +182,10 @@ def run_live_cases(
             except Exception as exc:
                 print_error(f"Could not save baseline: {exc}")
 
-        if json:
+        if jsonl:
+            for entry in results_payload:
+                print(json_lib.dumps(entry))
+        elif json:
             print_json(payload)
         else:
             table = Table(title="Benchmark Results")
@@ -187,15 +194,12 @@ def run_live_cases(
             if baseline_by_case:
                 table.add_column("Delta", justify="right")
             table.add_column("Decision")
-            table.add_column("Missing")
+            table.add_column("Tech↓", justify="right")
+            table.add_column("Find↓", justify="right")
+            table.add_column("Act↓", justify="right")
             table.add_column("Duration", justify="right")
             for item, result_row in zip(completed, results_payload):
                 result = item["evaluation"]
-                missing = (
-                    len(result.techniques_missing)
-                    + len(result.findings_missing)
-                    + len(result.actions_missing)
-                )
                 row = [
                     result.case_id,
                     f"{result.score:.0%}",
@@ -211,8 +215,10 @@ def run_live_cases(
                     else:
                         row.append("–")
                 row += [
-                    "match" if result.decision_match else "miss",
-                    str(missing),
+                    "match" if result.decision_match else "[red]miss[/red]",
+                    str(len(result.techniques_missing)),
+                    str(len(result.findings_missing)),
+                    str(len(result.actions_missing)),
                     f"{item['duration_seconds']:.1f}s",
                 ]
                 table.add_row(*row)

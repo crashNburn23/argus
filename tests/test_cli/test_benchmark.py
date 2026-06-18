@@ -146,3 +146,34 @@ def test_benchmark_compare_missing_baseline_exits(tmp_path) -> None:
     )
 
     assert result.exit_code == 2
+
+
+def test_benchmark_jsonl_outputs_one_line_per_case(tmp_path) -> None:
+    with patch(
+        "argus.cli.commands.benchmark.ReportGenerator.generate_incident_from_alerts",
+        new=_make_perfect_generator(),
+    ):
+        result = CliRunner().invoke(
+            app,
+            [
+                "benchmark", "run", "--all",
+                "--jsonl",
+                "--output-dir", str(tmp_path),
+            ],
+        )
+
+    assert result.exit_code == 0
+    lines = [line for line in result.stdout.strip().splitlines() if line]
+    assert len(lines) == 8
+    first = json.loads(lines[0])
+    assert "case_id" in first
+    assert "score" in first
+
+
+def test_benchmark_json_and_jsonl_mutually_exclusive(tmp_path) -> None:
+    result = CliRunner().invoke(
+        app,
+        ["benchmark", "run", "--all", "--json", "--jsonl", "--output-dir", str(tmp_path)],
+    )
+
+    assert result.exit_code == 2
