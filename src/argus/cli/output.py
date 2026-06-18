@@ -363,7 +363,7 @@ def print_agent_error(exc: Exception, as_json: bool = False) -> None:
 
 
 def render_markdown(text: str) -> None:
-    console.print(Markdown(text))
+    console.print(Markdown(text, hyperlinks=False))
 
 
 class _ThinkingIndicator:
