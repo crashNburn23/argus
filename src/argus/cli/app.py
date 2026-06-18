@@ -29,7 +29,9 @@ from argus.cli.commands import (
 from argus.cli.output import (
     cache_clear_display,
     cache_stats_display,
+    clear_live_status,
     console,
+    get_live_status,
     print_agent_error,
     render_markdown,
     status,
@@ -181,7 +183,7 @@ _SLASH_COMMANDS = [
     ("/quit",     ""),
 ]
 
-_CASE_SUBCOMMANDS = ["new", "list", "use", "show", "enrich", "pivot", "analyze", "report"]
+_CASE_SUBCOMMANDS = ["new", "list", "use", "show", "enrich", "pivot", "analyze", "report", "graph"]
 
 _REPORT_TYPES = ["daily", "weekly", "monthly", "yearly", "incident"]
 
@@ -278,6 +280,7 @@ _SLASH_HELP = """
   [cp.cyan]/case pivot[/cp.cyan]             Pivot active case observables
   [cp.cyan]/case analyze[/cp.cyan] [cp.dim][audience][/cp.dim] LLM report (default: cti)
   [cp.cyan]/case report[/cp.cyan]            Deterministic report (no LLM)
+  [cp.cyan]/case graph[/cp.cyan]  [cp.dim][--json][/cp.dim]    Observable relationship graph
 
 [cp.magenta]Research:[/cp.magenta]
   [cp.cyan]/research[/cp.cyan] [cp.dim]<actor>[/cp.dim]      Research a threat actor or campaign
@@ -393,6 +396,31 @@ async def _handle_case(args: list[str], session_state: dict[str, Any] | None) ->
         if c.pirs:
             console.print(f"  PIRs: {', '.join(p.question[:40] for p in c.pirs[:3])}")
 
+    elif sub == "graph":
+        case_id = str((session_state or {}).get("active_case_id") or "")
+        if not case_id:
+            console.print("[cp.amber]No active case.[/cp.amber] Use /case use <id> or /case new.")
+            return
+        try:
+            c = CaseStore().get(case_id)
+        except CaseNotFoundError:
+            console.print(f"[cp.amber]case not found:[/cp.amber] {case_id}")
+            return
+        from argus.cli.graph import build_case_graph, export_json, render_tree
+        g = build_case_graph(c)
+        if g.is_empty():
+            console.print("[cp.dim]No observables in this case to graph.[/cp.dim]")
+            return
+        as_json = "--json" in (rest or [])
+        if as_json:
+            console.print(export_json(g))
+        else:
+            render_tree(g, title=f"Case: {c.title[:40]}")
+            console.print(
+                f"[cp.dim]{len(g.nodes)} nodes  ·  {len(g.edges)} edges  ·  "
+                f"use [/cp.dim][cp.cyan]/case graph --json[/cp.cyan][cp.dim] to export[/cp.dim]"
+            )
+
     elif sub in ("enrich", "pivot", "analyze", "report"):
         case_id = (session_state or {}).get("active_case_id") or ""
         if not case_id:
@@ -435,6 +463,9 @@ def _drain_completed(
         if not t.done():
             continue
         active_tasks.remove(item)
+        # Clear toolbar status once the last task finishes.
+        if not any(not t2.done() for _, t2 in active_tasks):
+            clear_live_status()
         try:
             answer = t.result()
         except asyncio.CancelledError:
@@ -997,7 +1028,13 @@ async def _interactive_loop() -> None:
             mode = s.disclosure_mode
             mode_part = f"  ·  {mode}" if mode != "unrestricted" else ""
             n_running = sum(1 for _, t in active_tasks if not t.done())
-            running_part = f"  ·  [{n_running} running]" if n_running else ""
+            live = get_live_status()
+            if n_running and live:
+                running_part = f"  ·  ⟳ {live[:60]}"
+            elif n_running:
+                running_part = f"  ·  [{n_running} investigating]"
+            else:
+                running_part = ""
             return (
                 f"  {s.model_provider}/{s.model}  ·  theme:{get_theme()}"
                 f"{mode_part}{running_part}{sid_part}{case_part} "

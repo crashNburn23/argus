@@ -28,6 +28,7 @@ dependencies = [
     "structlog>=24.0.0",
     "anyio>=4.0.0",
     "prompt_toolkit>=3.0",
+    "ddgs>=0.1.0",
 ]
 
 [project.optional-dependencies]

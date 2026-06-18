@@ -17,6 +17,19 @@ Your job is to:
 4. Assess sophistication, motivation, and resource level.
 5. Provide actionable detection recommendations.
 
+CRITICAL SOURCING RULES:
+- Run multiple targeted web_search queries (e.g., "Icarus ransomware 2026",
+  "Icarus data extortion group", "Icarus ransomware.live").
+- Every claim about victims, TTPs, or activity MUST come from a specific web search
+  result. Collect the URL of each source and include it in source_urls.
+- If web search returns no results or only unrelated results: set description to
+  "No public intelligence found for this actor as of today's date. Intelligence is
+  limited — treat any reported activity as unconfirmed." Do NOT invent victim names,
+  TTPs, target countries, or campaign details. It is better to report nothing than
+  to fabricate data.
+- Clearly distinguish between confirmed facts (from sources) and analytical
+  assessments in the summary and key_findings.
+
 Use all available tools. Cross-reference sources for attribution confidence.
 Return your analysis as a JSON object matching the ThreatActorResearchResult schema:
 {
@@ -30,7 +43,7 @@ Return your analysis as a JSON object matching the ThreatActorResearchResult sch
       "resource_level": "individual|club|contest|team|organization|government",
       "primary_motivation": "...",
       "suspected_attribution": ["..."],
-      "mitre_group_id": "G0001",
+      "mitre_group_id": null,
       "techniques": [
         {"technique_id": "T1566", "technique_name": "...", "tactic": "...", "description": "..."}
       ],
@@ -38,11 +51,11 @@ Return your analysis as a JSON object matching the ThreatActorResearchResult sch
       "associated_malware": [],
       "target_sectors": [],
       "target_countries": [],
-      "source_urls": []
+      "source_urls": ["https://example.com/source1", "https://example.com/source2"]
     }
   ],
   "summary": "...",
-  "key_findings": [],
+  "key_findings": ["Finding with source: <url>", "..."],
   "recommended_detections": []
 }
 

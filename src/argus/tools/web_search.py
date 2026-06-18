@@ -1,21 +1,13 @@
-"""Web/OSINT search tool — uses DuckDuckGo instant answers API (no key required)."""
+"""Web/OSINT search tool — real DuckDuckGo results via duckduckgo-search."""
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
-import httpx
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+from ddgs import DDGS
 
 from argus.storage.cache import cache_get, cache_set
-
-_DDG_URL = "https://api.duckduckgo.com/"
-
-
-def _is_retryable(exc: BaseException) -> bool:
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code in (429, 500, 502, 503, 504)
-    return isinstance(exc, httpx.TransportError)
 
 
 def get_tool_definition() -> dict[str, Any]:
@@ -23,19 +15,20 @@ def get_tool_definition() -> dict[str, Any]:
         "name": "web_search",
         "description": (
             "Search the web for OSINT information about threat actors, campaigns, "
-            "malware families, or recent cybersecurity news."
+            "malware families, ransomware groups, or recent cybersecurity news. "
+            "Returns real search results with URLs and snippets from current web pages."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Search query, e.g. 'APT29 recent campaigns 2024'",
+                    "description": "Search query, e.g. 'Icarus ransomware group 2026'",
                 },
                 "num_results": {
                     "type": "integer",
-                    "description": "Number of results to return (default 5)",
-                    "default": 5,
+                    "description": "Number of results to return (default 8, max 15)",
+                    "default": 8,
                 },
             },
             "required": ["query"],
@@ -43,52 +36,32 @@ def get_tool_definition() -> dict[str, Any]:
     }
 
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=8),
-    retry=retry_if_exception(_is_retryable),
-    reraise=True,
-)
-async def _fetch_ddg(query: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(
-            _DDG_URL,
-            params={"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"},
-        )
-        resp.raise_for_status()
-        return dict(resp.json())
+def _ddg_search(query: str, max_results: int) -> list[dict[str, str]]:
+    with DDGS() as ddgs:
+        return list(ddgs.text(query, max_results=max_results))
 
 
-async def web_search(query: str, num_results: int = 5) -> str:
+async def web_search(query: str, num_results: int = 8) -> str:
+    num_results = min(num_results, 15)
     cache_key = f"websearch:{query}:{num_results}"
     cached = cache_get(cache_key)
     if cached:
         return json.dumps(cached)
 
     try:
-        data = await _fetch_ddg(query)
-        results = []
-
-        if data.get("AbstractText"):
-            results.append({
-                "title": data.get("Heading", ""),
-                "snippet": data.get("AbstractText", ""),
-                "url": data.get("AbstractURL", ""),
-                "source": data.get("AbstractSource", ""),
-            })
-
-        for topic in data.get("RelatedTopics", [])[:num_results - len(results)]:
-            if isinstance(topic, dict) and "Text" in topic:
-                results.append({
-                    "title": topic.get("Text", "")[:100],
-                    "snippet": topic.get("Text", ""),
-                    "url": topic.get("FirstURL", ""),
-                    "source": "DuckDuckGo",
-                })
-
-        result = {
+        raw = await asyncio.to_thread(_ddg_search, query, num_results)
+        results = [
+            {
+                "title": r.get("title", ""),
+                "snippet": r.get("body", ""),
+                "url": r.get("href", ""),
+                "source": _domain(r.get("href", "")),
+            }
+            for r in raw
+        ]
+        result: dict[str, Any] = {
             "query": query,
-            "results": results[:num_results],
+            "results": results,
             "total_returned": len(results),
         }
     except Exception as e:
@@ -96,3 +69,11 @@ async def web_search(query: str, num_results: int = 5) -> str:
 
     cache_set(cache_key, result, ttl=1800)
     return json.dumps(result)
+
+
+def _domain(url: str) -> str:
+    try:
+        from urllib.parse import urlparse
+        return urlparse(url).netloc or "unknown"
+    except Exception:
+        return "unknown"

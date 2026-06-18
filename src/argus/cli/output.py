@@ -396,6 +396,23 @@ class _ThinkingIndicator:
 
 _active_thinking_indicator: _ThinkingIndicator | None = None
 
+# Live status string for background-task runs (shown in toolbar, not stdout).
+_live_status: str = ""
+
+
+def set_live_status(msg: str) -> None:
+    global _live_status
+    _live_status = msg
+
+
+def get_live_status() -> str:
+    return _live_status
+
+
+def clear_live_status() -> None:
+    global _live_status
+    _live_status = ""
+
 
 @contextmanager
 def thinking(
@@ -411,11 +428,17 @@ def thinking(
 
 
 def status(msg: str) -> None:
-    """Update active thinking state, or print a status line when no indicator is active."""
+    """Update active thinking state or live status text.
+
+    When inside a thinking() block → updates the spinner text.
+    When no indicator is active → updates the toolbar status string.
+    Never prints directly to stdout during background runs (avoids ESC corruption
+    that occurs when console.print() bypasses prompt_toolkit's patch_stdout).
+    """
     if _active_thinking_indicator is not None:
         _active_thinking_indicator.update(msg)
     else:
-        console.print(f"[cp.cyan]⟳[/cp.cyan]  {msg}")
+        set_live_status(msg)
 
 
 
@@ -462,6 +485,10 @@ def render_ioc_result(result: Any, as_json: bool = False) -> None:
         for action in result.recommended_actions:
             console.print(f"  [cp.magenta]▸[/cp.magenta] {action}")
 
+    from argus.cli.graph import render_ioc_graph
+    for ioc in result.indicators:
+        render_ioc_graph(ioc)
+
 
 # ---------------------------------------------------------------------------
 # Threat actor
@@ -480,6 +507,11 @@ def render_threat_actor_result(result: Any, as_json: bool = False) -> None:
                 border_style="cp.border",
             )
         )
+
+    if result.key_findings:
+        console.print("\n[cp.cyan]Key Findings[/cp.cyan]")
+        for finding in result.key_findings:
+            console.print(f"  [cp.magenta]▸[/cp.magenta] {finding}")
 
     for actor in result.actors:
         table = Table(
@@ -500,6 +532,12 @@ def render_threat_actor_result(result: Any, as_json: bool = False) -> None:
             table.add_row("Sophistication", f"[cp.amber]{actor.sophistication}[/cp.amber]")
         if actor.target_sectors:
             table.add_row("Targets", ", ".join(actor.target_sectors[:5]))
+        if actor.target_countries:
+            table.add_row("Countries", ", ".join(actor.target_countries[:5]))
+        if actor.first_seen:
+            table.add_row("First seen", actor.first_seen.strftime("%Y-%m"))
+        if actor.last_seen:
+            table.add_row("Last seen", actor.last_seen.strftime("%Y-%m"))
         console.print(table)
 
         if actor.techniques:
@@ -516,10 +554,19 @@ def render_threat_actor_result(result: Any, as_json: bool = False) -> None:
                 tech_table.add_row(tech.technique_id, tech.technique_name, tech.tactic)
             console.print(tech_table)
 
+        if actor.source_urls:
+            console.print("\n[cp.dim]Sources[/cp.dim]")
+            for url in actor.source_urls[:10]:
+                console.print(f"  [cp.dim]·[/cp.dim] [cp.cyan]{url}[/cp.cyan]")
+
     if result.recommended_detections:
         console.print("\n[cp.cyan]Detection Recommendations[/cp.cyan]")
         for det in result.recommended_detections:
             console.print(f"  [cp.magenta]▸[/cp.magenta] {det}")
+
+    from argus.cli.graph import render_actor_graph
+    for actor in result.actors:
+        render_actor_graph(actor)
 
 
 # ---------------------------------------------------------------------------
