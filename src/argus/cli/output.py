@@ -1,7 +1,9 @@
 """CLI output helpers — Rich terminal rendering, themed console."""
 from __future__ import annotations
 
+import io
 import json
+import sys
 import threading
 import time
 from collections.abc import Generator
@@ -194,6 +196,41 @@ _current_theme: str = _load_saved_theme()
 _output_history: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
 
+class _DynamicStdout:
+    """A file-like object that always delegates to the current sys.stdout.
+
+    Rich's Console captures its output file at creation time (module import).
+    Passing an instance of this class instead means all writes are dispatched
+    to whichever sys.stdout is live at write time — including prompt_toolkit's
+    StdoutProxy when _pt_patch_stdout() is active. Without this, Rich writes
+    to the original pre-patch stdout, bypassing PT's cursor management and
+    causing ESC bytes to appear as '?' in the terminal.
+    """
+
+    def write(self, s: str) -> int:
+        return sys.stdout.write(s)
+
+    def flush(self) -> None:
+        sys.stdout.flush()
+
+    def isatty(self) -> bool:
+        return sys.stdout.isatty()
+
+    def fileno(self) -> int:
+        try:
+            return sys.stdout.fileno()
+        except Exception:
+            raise io.UnsupportedOperation("fileno")
+
+    @property
+    def encoding(self) -> str:
+        return getattr(sys.stdout, "encoding", "utf-8")
+
+    @property
+    def errors(self) -> str:
+        return getattr(sys.stdout, "errors", "strict")
+
+
 class _ConsoleProxy:
     """Proxy around Rich Console that intercepts print() for theme replay."""
 
@@ -202,7 +239,9 @@ class _ConsoleProxy:
         self._console: Console = self._build()
 
     def _build(self) -> Console:
-        return Console(theme=Theme(THEMES[_current_theme]), stderr=self._stderr)
+        if self._stderr:
+            return Console(theme=Theme(THEMES[_current_theme]), stderr=True)
+        return Console(theme=Theme(THEMES[_current_theme]), file=_DynamicStdout())
 
     def update_theme(self) -> None:
         self._console = self._build()
