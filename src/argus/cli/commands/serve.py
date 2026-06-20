@@ -1,4 +1,5 @@
 """argus serve — start the web UI server."""
+
 from __future__ import annotations
 
 import typer

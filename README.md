@@ -239,7 +239,7 @@ uv run ruff check src tests
 uv run mypy src/argus --ignore-missing-imports
 ```
 
-CI (pre-commit hooks) runs all three on every push. Currently 133 tests.
+CI (pre-commit hooks) runs all three on every push. Currently 194 tests.
 
 ## TODO
 

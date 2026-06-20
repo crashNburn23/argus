@@ -1,4 +1,5 @@
 """Tool registry — returns available tool definitions based on configured API keys."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -22,7 +23,6 @@ from argus.tools import (
     whois,
 )
 
-
 # Maps tool name → availability check lambda
 _AVAILABILITY: dict[str, Callable[..., bool]] = {
     "virustotal_lookup": lambda s: bool(s.api_key("virustotal")),
@@ -33,8 +33,8 @@ _AVAILABILITY: dict[str, Callable[..., bool]] = {
     "misp_search": lambda s: bool(s.misp_url),
     # Pivot tools
     "passive_dns_lookup": lambda s: bool(s.api_key("virustotal")),
-    "ssl_cert_lookup": lambda s: True,   # crt.sh is always free
-    "whois_lookup": lambda s: True,      # RDAP is always free
+    "ssl_cert_lookup": lambda s: True,  # crt.sh is always free
+    "whois_lookup": lambda s: True,  # RDAP is always free
     "siem_query": lambda s: (
         bool(
             s.siem_url
@@ -78,8 +78,14 @@ _DEFINITIONS: dict[str, Callable[[], dict[str, Any]]] = {
 # Which tools each agent type uses
 _AGENT_TOOLS: dict[str, list[str]] = {
     "ioc": [
-        "virustotal_lookup", "shodan_lookup", "abuseipdb_check", "otx_lookup", "urlhaus_lookup",
-        "passive_dns_lookup", "ssl_cert_lookup", "whois_lookup",
+        "virustotal_lookup",
+        "shodan_lookup",
+        "abuseipdb_check",
+        "otx_lookup",
+        "urlhaus_lookup",
+        "passive_dns_lookup",
+        "ssl_cert_lookup",
+        "whois_lookup",
     ],
     "threat_actor": ["mitre_attack_lookup", "otx_lookup", "recorded_future_search", "web_search"],
     "vuln": ["nvd_cve_lookup", "shodan_lookup"],
@@ -87,9 +93,18 @@ _AGENT_TOOLS: dict[str, list[str]] = {
     "report": ["siem_query"],
     "orchestrator": [],  # orchestrator uses agents as tools
     "case_analysis": [
-        "virustotal_lookup", "shodan_lookup", "abuseipdb_check", "otx_lookup", "urlhaus_lookup",
-        "passive_dns_lookup", "ssl_cert_lookup", "whois_lookup", "mitre_attack_lookup",
-        "recorded_future_search", "web_search", "url_fetch",
+        "virustotal_lookup",
+        "shodan_lookup",
+        "abuseipdb_check",
+        "otx_lookup",
+        "urlhaus_lookup",
+        "passive_dns_lookup",
+        "ssl_cert_lookup",
+        "whois_lookup",
+        "mitre_attack_lookup",
+        "recorded_future_search",
+        "web_search",
+        "url_fetch",
     ],
 }
 
@@ -129,10 +144,19 @@ def tool_status() -> list[dict[str, Any]]:
             continue
 
         if available:
-            reason = "ready (no key required)" if check(settings) and name in (
-                "mitre_attack_lookup", "nvd_cve_lookup", "urlhaus_lookup",
-                "web_search", "url_fetch",
-            ) else "API key configured"
+            reason = (
+                "ready (no key required)"
+                if check(settings)
+                and name
+                in (
+                    "mitre_attack_lookup",
+                    "nvd_cve_lookup",
+                    "urlhaus_lookup",
+                    "web_search",
+                    "url_fetch",
+                )
+                else "API key configured"
+            )
         else:
             # Derive a human-readable reason
             if name == "misp_search":
@@ -191,15 +215,31 @@ async def dispatch_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
     handler = _HANDLERS.get(tool_name)
     if handler is None:
         import json
+
         return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
     # Normalize mismatched argument names the LLM sometimes produces.
-    if tool_name == "recorded_future_search" and "query" in tool_input and "entity" not in tool_input:
-        tool_input = {**tool_input, "entity": tool_input.pop("query"), "entity_type": tool_input.get("entity_type", "actor")}
+    if (
+        tool_name == "recorded_future_search"
+        and "query" in tool_input
+        and "entity" not in tool_input
+    ):
+        tool_input = {
+            **tool_input,
+            "entity": tool_input.pop("query"),
+            "entity_type": tool_input.get("entity_type", "actor"),
+        }
     if tool_name == "ssl_cert_lookup" and "query" in tool_input and "indicator" not in tool_input:
         import json
-        return json.dumps({"error": "ssl_cert_lookup requires indicator + indicator_type, not a search query"})
-    if tool_name == "passive_dns_lookup" and "ioc_type" in tool_input and "indicator_type" not in tool_input:
+
+        return json.dumps(
+            {"error": "ssl_cert_lookup requires indicator + indicator_type, not a search query"}
+        )
+    if (
+        tool_name == "passive_dns_lookup"
+        and "ioc_type" in tool_input
+        and "indicator_type" not in tool_input
+    ):
         tool_input = {**tool_input, "indicator_type": tool_input.pop("ioc_type")}
     if tool_name == "passive_dns_lookup" and "ip" in tool_input and "indicator" not in tool_input:
         tool_input = {**tool_input, "indicator": tool_input.pop("ip")}
@@ -210,6 +250,7 @@ async def dispatch_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
     # Large context (7 articles × 10KB) causes very slow LLM calls.
     if tool_name == "url_fetch":
         import json as _json
+
         try:
             parsed = _json.loads(result)
             if parsed.get("status") == "ok" and parsed.get("content"):

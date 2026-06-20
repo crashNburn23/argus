@@ -1,4 +1,5 @@
 """Argus CLI — root Typer application."""
+
 from __future__ import annotations
 
 import asyncio
@@ -52,94 +53,95 @@ from argus.storage.sessions import (
 
 _PT_STYLES: dict[str, dict[str, str]] = {
     "analyst": {
-        "argus-name":  "#6677aa bold",
+        "argus-name": "#6677aa bold",
         "argus-arrow": "#4499cc bold",
-        "completion-menu":                    "bg:#07111f #c8d3df",
-        "completion-menu.completion":         "bg:#07111f #c8d3df",
+        "completion-menu": "bg:#07111f #c8d3df",
+        "completion-menu.completion": "bg:#07111f #c8d3df",
         "completion-menu.completion.current": "bg:#1f3148 #ffffff bold",
-        "completion-menu.meta":               "bg:#07111f #6f8398",
-        "completion-menu.meta.current":       "bg:#1f3148 #b7c4d6",
-        "completion-menu.multi-column-meta":  "bg:#07111f #6f8398",
+        "completion-menu.meta": "bg:#07111f #6f8398",
+        "completion-menu.meta.current": "bg:#1f3148 #b7c4d6",
+        "completion-menu.multi-column-meta": "bg:#07111f #6f8398",
         "scrollbar.background": "bg:#07111f",
-        "scrollbar.button":     "bg:#1f3148",
-        "auto-suggest":         "#334455",
-        "bottom-toolbar":       "bg:#000d1a #334466",
+        "scrollbar.button": "bg:#1f3148",
+        "auto-suggest": "#334455",
+        "bottom-toolbar": "bg:#000d1a #334466",
     },
     "contrast": {
-        "argus-name":  "bold ansimagenta",
+        "argus-name": "bold ansimagenta",
         "argus-arrow": "bold ansicyan",
-        "completion-menu":                    "bg:ansiblack ansiwhite",
-        "completion-menu.completion":         "bg:ansiblack ansiwhite",
+        "completion-menu": "bg:ansiblack ansiwhite",
+        "completion-menu.completion": "bg:ansiblack ansiwhite",
         "completion-menu.completion.current": "bg:ansiwhite ansiblack bold",
-        "completion-menu.meta":               "bg:ansiblack ansicyan",
-        "completion-menu.meta.current":       "bg:ansiwhite ansiblack",
-        "completion-menu.multi-column-meta":  "bg:ansiblack ansicyan",
+        "completion-menu.meta": "bg:ansiblack ansicyan",
+        "completion-menu.meta.current": "bg:ansiwhite ansiblack",
+        "completion-menu.multi-column-meta": "bg:ansiblack ansicyan",
         "scrollbar.background": "bg:ansiblack",
-        "scrollbar.button":     "bg:ansiwhite",
-        "auto-suggest":         "ansiblue",
-        "bottom-toolbar":       "bg:ansiblack bold ansicyan",
+        "scrollbar.button": "bg:ansiwhite",
+        "auto-suggest": "ansiblue",
+        "bottom-toolbar": "bg:ansiblack bold ansicyan",
     },
     "mono": {
-        "argus-name":  "bold underline",
+        "argus-name": "bold underline",
         "argus-arrow": "bold",
-        "completion-menu":                    "",
-        "completion-menu.completion":         "",
+        "completion-menu": "",
+        "completion-menu.completion": "",
         "completion-menu.completion.current": "reverse bold",
-        "completion-menu.meta":               "dim",
-        "completion-menu.meta.current":       "reverse",
-        "completion-menu.multi-column-meta":  "dim",
+        "completion-menu.meta": "dim",
+        "completion-menu.meta.current": "reverse",
+        "completion-menu.multi-column-meta": "dim",
         "scrollbar.background": "",
-        "scrollbar.button":     "reverse",
-        "auto-suggest":         "italic",
-        "bottom-toolbar":       "reverse",
+        "scrollbar.button": "reverse",
+        "auto-suggest": "italic",
+        "bottom-toolbar": "reverse",
     },
     "midnight": {
-        "argus-name":  "#a070a0 bold",
+        "argus-name": "#a070a0 bold",
         "argus-arrow": "#7ca2d6 bold",
-        "completion-menu":                    "bg:#101827 #cad5e2",
-        "completion-menu.completion":         "bg:#101827 #cad5e2",
+        "completion-menu": "bg:#101827 #cad5e2",
+        "completion-menu.completion": "bg:#101827 #cad5e2",
         "completion-menu.completion.current": "bg:#273653 #ffffff bold",
-        "completion-menu.meta":               "bg:#101827 #788ca8",
-        "completion-menu.meta.current":       "bg:#273653 #c2cce0",
-        "completion-menu.multi-column-meta":  "bg:#101827 #788ca8",
+        "completion-menu.meta": "bg:#101827 #788ca8",
+        "completion-menu.meta.current": "bg:#273653 #c2cce0",
+        "completion-menu.multi-column-meta": "bg:#101827 #788ca8",
         "scrollbar.background": "bg:#101827",
-        "scrollbar.button":     "bg:#273653",
-        "auto-suggest":         "#3a4a5e",
-        "bottom-toolbar":       "bg:#0d1a2e #2a3a5a",
+        "scrollbar.button": "bg:#273653",
+        "auto-suggest": "#3a4a5e",
+        "bottom-toolbar": "bg:#0d1a2e #2a3a5a",
     },
     "nord": {
-        "argus-name":  "#b48ead bold",
+        "argus-name": "#b48ead bold",
         "argus-arrow": "#88c0d0 bold",
-        "completion-menu":                    "bg:#252b35 #d8dee9",
-        "completion-menu.completion":         "bg:#252b35 #d8dee9",
+        "completion-menu": "bg:#252b35 #d8dee9",
+        "completion-menu.completion": "bg:#252b35 #d8dee9",
         "completion-menu.completion.current": "bg:#3b4252 #eceff4 bold",
-        "completion-menu.meta":               "bg:#252b35 #8f9eb5",
-        "completion-menu.meta.current":       "bg:#3b4252 #c8d1df",
-        "completion-menu.multi-column-meta":  "bg:#252b35 #8f9eb5",
+        "completion-menu.meta": "bg:#252b35 #8f9eb5",
+        "completion-menu.meta.current": "bg:#3b4252 #c8d1df",
+        "completion-menu.multi-column-meta": "bg:#252b35 #8f9eb5",
         "scrollbar.background": "bg:#252b35",
-        "scrollbar.button":     "bg:#3b4252",
-        "auto-suggest":         "#4c566a",
-        "bottom-toolbar":       "bg:#2e3440 #3b4252",
+        "scrollbar.button": "bg:#3b4252",
+        "auto-suggest": "#4c566a",
+        "bottom-toolbar": "bg:#2e3440 #3b4252",
     },
     "ember": {
-        "argus-name":  "#d4714f bold",
+        "argus-name": "#d4714f bold",
         "argus-arrow": "#e8a26b bold",
-        "completion-menu":                    "bg:#1b130d #e0d3c1",
-        "completion-menu.completion":         "bg:#1b130d #e0d3c1",
+        "completion-menu": "bg:#1b130d #e0d3c1",
+        "completion-menu.completion": "bg:#1b130d #e0d3c1",
         "completion-menu.completion.current": "bg:#54331f #ffffff bold",
-        "completion-menu.meta":               "bg:#1b130d #9b846e",
-        "completion-menu.meta.current":       "bg:#54331f #ddc3a8",
-        "completion-menu.multi-column-meta":  "bg:#1b130d #9b846e",
+        "completion-menu.meta": "bg:#1b130d #9b846e",
+        "completion-menu.meta.current": "bg:#54331f #ddc3a8",
+        "completion-menu.multi-column-meta": "bg:#1b130d #9b846e",
         "scrollbar.background": "bg:#1b130d",
-        "scrollbar.button":     "bg:#54331f",
-        "auto-suggest":         "#5a3a22",
-        "bottom-toolbar":       "bg:#1a0d05 #6b4422",
+        "scrollbar.button": "bg:#54331f",
+        "auto-suggest": "#5a3a22",
+        "bottom-toolbar": "bg:#1a0d05 #6b4422",
     },
 }
 
 
 def _pt_style() -> Style:
     from argus.cli.output import get_theme
+
     return Style.from_dict(_PT_STYLES.get(get_theme(), _PT_STYLES["analyst"]))
 
 
@@ -163,26 +165,26 @@ app.command("doctor")(doctor.doctor_command)
 app.command("ask")(query.ask)
 
 _SLASH_COMMANDS = [
-    ("/case",     "new|list|use|show|enrich|pivot|analyze|report"),
+    ("/case", "new|list|use|show|enrich|pivot|analyze|report"),
     ("/research", "<actor or campaign>"),
-    ("/vuln",     "<CVE-ID...>"),
-    ("/triage",   "<raw log>"),
-    ("/model",    "[name|list]"),
-    ("/theme",    "[name|list]"),
-    ("/doctor",   ""),
-    ("/status",   ""),
-    ("/verbose",  "[on|off]"),
-    ("/clear",    ""),
-    ("/new",      ""),
-    ("/cache",    ""),
+    ("/vuln", "<CVE-ID...>"),
+    ("/triage", "<raw log>"),
+    ("/model", "[name|list]"),
+    ("/theme", "[name|list]"),
+    ("/doctor", ""),
+    ("/status", ""),
+    ("/verbose", "[on|off]"),
+    ("/clear", ""),
+    ("/new", ""),
+    ("/cache", ""),
     ("/sessions", "[delete <id>]"),
-    ("/save",     "[title]"),
-    ("/resume",   "<session-id>"),
-    ("/runs",     "[N]"),
-    ("/sources",  ""),
-    ("/help",     ""),
-    ("/exit",     ""),
-    ("/quit",     ""),
+    ("/save", "[title]"),
+    ("/resume", "<session-id>"),
+    ("/runs", "[N]"),
+    ("/sources", ""),
+    ("/help", ""),
+    ("/exit", ""),
+    ("/quit", ""),
 ]
 
 _CASE_SUBCOMMANDS = ["new", "list", "use", "show", "enrich", "pivot", "analyze", "report", "graph"]
@@ -194,6 +196,7 @@ def _ollama_models() -> list[str]:
     try:
         from argus.cli.commands.model import list_ollama_models
         from argus.config.settings import get_settings
+
         return list_ollama_models(get_settings().ollama_base_url, timeout=1.0)
     except Exception:
         return []
@@ -215,7 +218,7 @@ class _ArgusCompleter(Completer):
             for cmd, hint in _SLASH_COMMANDS:
                 if cmd.startswith(verb):
                     yield Completion(
-                        cmd[len(verb):],
+                        cmd[len(verb) :],
                         display=cmd,
                         display_meta=hint,
                     )
@@ -227,33 +230,34 @@ class _ArgusCompleter(Completer):
         if verb == "/case":
             for sub in _CASE_SUBCOMMANDS:
                 if sub.startswith(partial):
-                    yield Completion(sub[len(partial):], display=sub)
+                    yield Completion(sub[len(partial) :], display=sub)
 
         # /model → complete "list" or local Ollama model names
         elif verb == "/model":
             candidates = ["list"] + _ollama_models()
             for c in candidates:
                 if c.startswith(partial):
-                    yield Completion(c[len(partial):], display=c)
+                    yield Completion(c[len(partial) :], display=c)
 
         # /theme → complete theme names
         elif verb == "/theme":
             from argus.cli.output import get_theme_names
+
             for nm in ["list"] + get_theme_names():
                 if nm.startswith(partial):
-                    yield Completion(nm[len(partial):], display=nm)
+                    yield Completion(nm[len(partial) :], display=nm)
 
         # /sessions → complete "delete" subcommand
         elif verb == "/sessions":
             for sub in ["delete"]:
                 if sub.startswith(partial):
-                    yield Completion(sub[len(partial):], display=sub)
+                    yield Completion(sub[len(partial) :], display=sub)
 
         # /verbose → complete toggle values
         elif verb == "/verbose":
             for value in ["on", "off"]:
                 if value.startswith(partial):
-                    yield Completion(value[len(partial):], display=value)
+                    yield Completion(value[len(partial) :], display=value)
 
         # /resume → complete session IDs
         elif verb == "/resume":
@@ -262,7 +266,7 @@ class _ArgusCompleter(Completer):
                     sid = s["id"]
                     if sid.startswith(partial):
                         yield Completion(
-                            sid[len(partial):],
+                            sid[len(partial) :],
                             display=sid,
                             display_meta=s.get("title", "")[:40],
                         )
@@ -320,6 +324,7 @@ async def _handle_case(args: list[str], session_state: dict[str, Any] | None) ->
 
     if sub == "new":
         from argus.models.case import Case as _Case
+
         title = " ".join(rest) if rest else "Untitled case"
         try:
             new_case = CaseStore().create(_Case(title=title))
@@ -343,6 +348,7 @@ async def _handle_case(args: list[str], session_state: dict[str, Any] | None) ->
             console.print("[cp.dim]No cases found. Use /case new <title> to create one.[/cp.dim]")
             return
         from rich.table import Table as _Table
+
         active_id = (session_state or {}).get("active_case_id", "")
         t = _Table(
             title="[cp.cyan]Recent Cases[/cp.cyan]",
@@ -409,6 +415,7 @@ async def _handle_case(args: list[str], session_state: dict[str, Any] | None) ->
             console.print(f"[cp.amber]case not found:[/cp.amber] {case_id}")
             return
         from argus.cli.graph import build_case_graph, export_json, render_tree
+
         g = build_case_graph(c)
         if g.is_empty():
             console.print("[cp.dim]No observables in this case to graph.[/cp.dim]")
@@ -431,6 +438,7 @@ async def _handle_case(args: list[str], session_state: dict[str, Any] | None) ->
         from typer.testing import CliRunner
 
         from argus.cli.commands.case import app as case_app
+
         runner = CliRunner()
         extra = list(rest)
         if sub == "analyze" and not any(a.startswith("--audience") for a in extra):
@@ -497,6 +505,7 @@ async def _classify_mid_run_input(new_text: str, active_query: str) -> str:
     try:
         from argus.config.settings import get_settings
         from argus.llm.client import AnthropicClient, OllamaClient
+
         s = get_settings()
         loop = asyncio.get_running_loop()
 
@@ -514,13 +523,15 @@ async def _classify_mid_run_input(new_text: str, active_query: str) -> str:
                     "Reply 'extend' if the new message refines or adds context to the active "
                     "investigation. Reply 'background' if it is a separate, independent request."
                 ),
-                messages=[{
-                    "role": "user",
-                    "content": (
-                        f"Active investigation: {active_query[:200]}\n"
-                        f"New message: {new_text[:200]}"
-                    ),
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Active investigation: {active_query[:200]}\n"
+                            f"New message: {new_text[:200]}"
+                        ),
+                    }
+                ],
             )
             text = resp.content[0].text.strip().lower() if resp.content else "background"
             return "extend" if text.startswith("extend") else "background"
@@ -564,6 +575,7 @@ async def _handle_slash(
         else:
             from argus.agents.threat_actor_agent import ThreatActorAgent
             from argus.cli.output import render_threat_actor_result
+
             query_str = " ".join(args)
             try:
                 with thinking(f"researching {query_str}"):
@@ -578,6 +590,7 @@ async def _handle_slash(
         else:
             from argus.agents.vuln_agent import VulnIntelAgent
             from argus.cli.output import render_vuln_result
+
             try:
                 with thinking(f"looking up {', '.join(args)}"):
                     result3: Any = await VulnIntelAgent(progress=status).run(cve_ids=args)
@@ -591,6 +604,7 @@ async def _handle_slash(
         else:
             from argus.agents.triage_agent import TriageAgent
             from argus.cli.output import render_triage_result
+
             raw_log = " ".join(args)
             alert = {"alert_id": "interactive-1", "raw_log": raw_log}
             try:
@@ -603,12 +617,14 @@ async def _handle_slash(
     elif verb == "/model":
         from argus.cli.commands.model import list_ollama_models, persist_model
         from argus.config.settings import get_settings
+
         s = get_settings()
         if not args or args[0] == "list":
             console.print(f"Current: [bold]{s.model_provider}[/bold] / [bold]{s.model}[/bold]")
             try:
                 models = list_ollama_models(s.ollama_base_url)
                 from rich.table import Table
+
                 t = Table(title="Local Ollama Models")
                 t.add_column("Model")
                 for m in models:
@@ -625,8 +641,7 @@ async def _handle_slash(
                 return True
             if name not in available:
                 console.print(
-                    f"[red]Model '{name}' not found.[/red]"
-                    f" Available: {', '.join(available)}"
+                    f"[red]Model '{name}' not found.[/red] Available: {', '.join(available)}"
                 )
                 return True
             persist_model("ollama", name)
@@ -715,8 +730,7 @@ async def _handle_slash(
             else "runtime log messages hidden; agent status updates remain visible"
         )
         console.print(
-            f"[cp.green]✓[/cp.green] verbose: [cp.cyan]{state}[/cp.cyan]  "
-            f"[cp.dim]{detail}[/cp.dim]"
+            f"[cp.green]✓[/cp.green] verbose: [cp.cyan]{state}[/cp.cyan]  [cp.dim]{detail}[/cp.dim]"
         )
 
     elif verb in ("/clear", "/new"):
@@ -724,6 +738,7 @@ async def _handle_slash(
         if clear:
             clear()
         from argus.cli.output import clear_output_history
+
         clear_output_history()
         console.clear()
         console.print("[cp.green]▸[/cp.green] [cp.cyan]Fresh conversation started.[/cp.cyan]")
@@ -742,6 +757,7 @@ async def _handle_slash(
                     console.print(f"[cp.amber]session not found:[/cp.amber] {sid}")
         else:
             from rich.table import Table as _Table
+
             sessions = list_sessions()
             if not sessions:
                 console.print("[cp.dim]No saved sessions.[/cp.dim]")
@@ -780,6 +796,7 @@ async def _handle_slash(
                     break
             title = " ".join(args) if args else (default_title or sid)
             from argus.config.settings import get_settings
+
             cfg = get_settings()
             model_info = f"{cfg.model_provider}/{cfg.model}"
             save_session(sid, title, model_info, exchanges)
@@ -830,9 +847,13 @@ async def _handle_slash(
             from argus.storage.models_db import AgentRunRecord
 
             with get_db_session() as db:
-                rows = db.execute(
-                    select(AgentRunRecord).order_by(desc(AgentRunRecord.created_at)).limit(n)
-                ).scalars().all()
+                rows = (
+                    db.execute(
+                        select(AgentRunRecord).order_by(desc(AgentRunRecord.created_at)).limit(n)
+                    )
+                    .scalars()
+                    .all()
+                )
 
             if not rows:
                 console.print("[cp.dim]No agent runs recorded yet.[/cp.dim]")
@@ -914,18 +935,22 @@ async def _handle_slash(
 
 def _pt_make_style() -> Style:
     from argus.cli.output import get_theme
+
     pt = _PT_STYLES.get(get_theme(), _PT_STYLES["analyst"])
-    return Style.from_dict({
-        **pt,
-        "completion.cmd":  pt.get("completion-menu.completion", ""),
-        "completion.meta": pt.get("completion-menu.meta", "dim"),
-        "bottom-toolbar":  pt.get("bottom-toolbar", "reverse"),
-    })
+    return Style.from_dict(
+        {
+            **pt,
+            "completion.cmd": pt.get("completion-menu.completion", ""),
+            "completion.meta": pt.get("completion-menu.meta", "dim"),
+            "bottom-toolbar": pt.get("bottom-toolbar", "reverse"),
+        }
+    )
 
 
 def _show_disclosure_warning() -> None:
     """Warn when a restricted disclosure mode is active."""
     from argus.config.settings import get_settings
+
     try:
         s = get_settings()
     except Exception:
@@ -946,6 +971,7 @@ def _show_disclosure_warning() -> None:
 def _show_first_run_guidance() -> None:
     """Detect missing model configuration and show setup guidance."""
     from argus.diagnostics import run_diagnostics
+
     try:
         result = run_diagnostics(check_connectivity=False)
     except Exception:
@@ -1022,6 +1048,7 @@ async def _interactive_loop() -> None:
         try:
             from argus.cli.output import get_theme
             from argus.config.settings import get_settings
+
             s = get_settings()
             sid = session_state.get("id", "")
             sid_part = f"  ·  session:{sid[:8]}" if sid else ""
@@ -1053,10 +1080,12 @@ async def _interactive_loop() -> None:
         auto_suggest=AutoSuggestFromHistory(),
     )
 
-    _prompt = FormattedText([
-        ("class:argus-name", "  argus"),
-        ("class:argus-arrow", " › "),
-    ])
+    _prompt = FormattedText(
+        [
+            ("class:argus-name", "  argus"),
+            ("class:argus-arrow", " › "),
+        ]
+    )
 
     with _pt_patch_stdout():
         while True:
@@ -1101,13 +1130,16 @@ async def _interactive_loop() -> None:
             # Disclosure-mode confirmation (non-blocking — still inside patch_stdout).
             try:
                 from argus.config.settings import get_settings
+
                 if get_settings().disclosure_mode == "confirm-external":
                     confirmed = await pt_session.prompt_async(
-                        FormattedText([
-                            ("class:argus-arrow", "  Send query to "),
-                            ("class:argus-name", get_settings().model_provider),
-                            ("class:argus-arrow", "? [y/N] "),
-                        ])
+                        FormattedText(
+                            [
+                                ("class:argus-arrow", "  Send query to "),
+                                ("class:argus-name", get_settings().model_provider),
+                                ("class:argus-arrow", "? [y/N] "),
+                            ]
+                        )
                     )
                     if confirmed.strip().lower() not in {"y", "yes"}:
                         console.print("[cp.dim]Cancelled.[/cp.dim]")
@@ -1151,6 +1183,7 @@ def run_interactive() -> None:
 def main(ctx: typer.Context) -> None:
     """Start an interactive session when no subcommand is provided."""
     from argus.log_config import configure_logging
+
     configure_logging()
     if ctx.invoked_subcommand is None:
         run_interactive()

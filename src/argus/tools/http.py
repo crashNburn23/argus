@@ -5,6 +5,7 @@ pattern) tears down the TCP+TLS connection after every call. Module-level client
 reuse connections via httpx's built-in pool, which matters especially for retried
 calls and concurrent tool dispatch.
 """
+
 from __future__ import annotations
 
 import functools

@@ -97,12 +97,12 @@ class CTIReport(BaseModel):
     introduction: str = ""
     executive_summary: str = ""
     key_findings: list[str] = []
-    analyst_assessment: str = ""        # core analytical product: correlations, attribution, intent
+    analyst_assessment: str = ""  # core analytical product: correlations, attribution, intent
     threat_actor_profiles: list[str] = []  # per-actor narrative tied to observed evidence
-    ttp_analysis: str = ""              # MITRE ATT&CK-mapped TTP narrative
+    ttp_analysis: str = ""  # MITRE ATT&CK-mapped TTP narrative
     campaign_correlations: list[str] = []  # specific cross-source connections
-    threat_landscape: str = ""          # broader context / sector trends
-    confidence_assessment: str = ""     # confidence level and intelligence gaps
+    threat_landscape: str = ""  # broader context / sector trends
+    confidence_assessment: str = ""  # confidence level and intelligence gaps
     recommendations: list[Recommendation] = []
     references: list[str] = []
     technical_appendix: dict[str, Any] = {}

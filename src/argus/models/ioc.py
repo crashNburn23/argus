@@ -26,17 +26,17 @@ class IOCVerdict(StrEnum):
 
 
 _VERDICT_ALIASES: dict[str, str] = {
-    "harmless":   "benign",
-    "clean":      "benign",
-    "safe":       "benign",
+    "harmless": "benign",
+    "clean": "benign",
+    "safe": "benign",
     "undetected": "unknown",
     "no verdict": "unknown",
-    "neutral":    "unknown",
+    "neutral": "unknown",
     "informational": "unknown",
-    "malware":    "malicious",
-    "phishing":   "malicious",
+    "malware": "malicious",
+    "phishing": "malicious",
     "ransomware": "malicious",
-    "spam":       "suspicious",
+    "spam": "suspicious",
     "potentially unwanted": "suspicious",
 }
 
@@ -94,10 +94,10 @@ class IOCEnrichmentRecord(BaseModel):
     kill_chain_phases: list[str] = []
 
     # Pivot data — populated when passive DNS / cert / WHOIS tools are used
-    passive_dns: list[dict[str, Any]] = []       # historical resolutions
-    ssl_certs: list[dict[str, Any]] = []         # associated SSL/TLS certs
-    whois: dict[str, Any] | None = None          # registration data
-    related_infrastructure: list[str] = []       # IPs/domains discovered via pivoting
+    passive_dns: list[dict[str, Any]] = []  # historical resolutions
+    ssl_certs: list[dict[str, Any]] = []  # associated SSL/TLS certs
+    whois: dict[str, Any] | None = None  # registration data
+    related_infrastructure: list[str] = []  # IPs/domains discovered via pivoting
 
     @field_validator("asn", "geolocation", "stix_pattern", mode="before")
     @classmethod

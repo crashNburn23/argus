@@ -1,4 +1,5 @@
 """argus vuln — vulnerability intelligence commands."""
+
 from __future__ import annotations
 
 import asyncio

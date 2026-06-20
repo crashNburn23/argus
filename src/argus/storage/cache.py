@@ -84,8 +84,11 @@ class RateLimiter:
                 cache.set(self._key, {"count": 1, "window_start": now}, expire=self._window)
                 return True
             if count < self.calls_per_minute:
-                cache.set(self._key, {"count": count + 1, "window_start": window_start},
-                          expire=self._window - elapsed)
+                cache.set(
+                    self._key,
+                    {"count": count + 1, "window_start": window_start},
+                    expire=self._window - elapsed,
+                )
                 return True
             return False
 

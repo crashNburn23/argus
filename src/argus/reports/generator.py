@@ -4,6 +4,7 @@ Used by the benchmark harness (argus benchmark run/render).
 The daily/weekly/monthly report pipeline has been retired in favour of
 the case-based workflow (argus case analyze / argus case report).
 """
+
 from __future__ import annotations
 
 import json
@@ -119,23 +120,23 @@ class ReportGenerator:
         settings = get_settings()
         settings.reports_dir.mkdir(parents=True, exist_ok=True)
 
-        filename = (
-            f"{report.report_type.value}_{report.generated_at.strftime('%Y%m%d_%H%M%S')}.md"
-        )
+        filename = f"{report.report_type.value}_{report.generated_at.strftime('%Y%m%d_%H%M%S')}.md"
         output_path = settings.reports_dir / filename
         output_path.write_text(report.content, encoding="utf-8")
         log.info("report.saved", path=str(output_path))
 
         try:
             with get_session() as session:
-                session.add(ReportRecord(
-                    report_type=report.report_type.value,
-                    title=report.title,
-                    content=report.content,
-                    metadata_json=json.dumps(
-                        {"scope": report.scope, "classification": report.classification.value},
-                        default=str,
-                    ),
-                ))
+                session.add(
+                    ReportRecord(
+                        report_type=report.report_type.value,
+                        title=report.title,
+                        content=report.content,
+                        metadata_json=json.dumps(
+                            {"scope": report.scope, "classification": report.classification.value},
+                            default=str,
+                        ),
+                    )
+                )
         except Exception as e:
             log.warning("report.db_save_failed", error=str(e))

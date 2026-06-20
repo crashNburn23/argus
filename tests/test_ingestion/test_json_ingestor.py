@@ -62,8 +62,7 @@ def test_ingest_sha256_from_hash_field() -> None:
     alerts = [{"file_hash": sha256}]
     result = ingest_json_alerts(alerts)
     assert any(
-        o.observable_type == ObservableType.SHA256 and o.value == sha256
-        for o in result.observables
+        o.observable_type == ObservableType.SHA256 and o.value == sha256 for o in result.observables
     )
 
 

@@ -36,18 +36,13 @@ def _get_engine() -> Engine:
 def _migrate(engine: Engine) -> None:
     """Add columns introduced after the initial schema without dropping data."""
     with engine.connect() as conn:
-        existing = {
-            row[1]
-            for row in conn.execute(text("PRAGMA table_info(agent_run_records)"))
-        }
+        existing = {row[1] for row in conn.execute(text("PRAGMA table_info(agent_run_records)"))}
         if "status" not in existing:
-            conn.execute(text(
-                "ALTER TABLE agent_run_records ADD COLUMN status TEXT DEFAULT 'success'"
-            ))
+            conn.execute(
+                text("ALTER TABLE agent_run_records ADD COLUMN status TEXT DEFAULT 'success'")
+            )
         if "error_category" not in existing:
-            conn.execute(text(
-                "ALTER TABLE agent_run_records ADD COLUMN error_category TEXT"
-            ))
+            conn.execute(text("ALTER TABLE agent_run_records ADD COLUMN error_category TEXT"))
         conn.commit()
 
 

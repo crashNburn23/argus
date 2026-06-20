@@ -2,6 +2,7 @@
 
 Uses FakeLLMClient from test_base_agent.py pattern — no live LLM calls.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,6 +19,7 @@ from argus.llm.client import LLMResponse, TextBlock, ToolUseBlock, Usage
 # ---------------------------------------------------------------------------
 # Minimal fake LLM (duplicated from test_base_agent pattern for isolation)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class FakeResponse:
@@ -113,6 +115,7 @@ async def test_threat_actor_agent_excludes_ttp_instruction_when_false() -> None:
 @pytest.mark.asyncio
 async def test_threat_actor_agent_raises_on_invalid_json() -> None:
     from argus.agents.errors import AgentError
+
     agent = _patch_agent(ThreatActorAgent, [FakeResponse(text="NOT JSON")])
     with pytest.raises(AgentError):
         await agent.run(query="BadActor")
@@ -164,6 +167,7 @@ async def test_vuln_intel_agent_keyword_search_included_in_prompt() -> None:
 @pytest.mark.asyncio
 async def test_vuln_intel_agent_raises_on_bad_json() -> None:
     from argus.agents.errors import AgentError
+
     agent = _patch_agent(VulnIntelAgent, [FakeResponse(text="{bad json")])
     with pytest.raises(AgentError):
         await agent.run(cve_ids=["CVE-2021-99999"])
@@ -228,6 +232,7 @@ async def test_triage_agent_context_included_when_provided() -> None:
 @pytest.mark.asyncio
 async def test_triage_agent_raises_on_invalid_json() -> None:
     from argus.agents.errors import AgentError
+
     agent = _patch_agent(TriageAgent, [FakeResponse(text="null")])
     with pytest.raises(AgentError):
         await agent.run(alerts=[_TRIAGE_ALERT])

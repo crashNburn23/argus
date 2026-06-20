@@ -1,4 +1,5 @@
 """Synthetic incident-response ticket corpus and report evaluation helpers."""
+
 from __future__ import annotations
 
 import json
@@ -137,9 +138,7 @@ def evaluate_report(case: IncidentCase, report: CTIReport) -> EvaluationResult:
         + len(expected.required_findings)
         + len(expected.required_actions)
     )
-    matched = (
-        int(decision_match) + len(techniques_found) + len(findings_found) + len(actions_found)
-    )
+    matched = int(decision_match) + len(techniques_found) + len(findings_found) + len(actions_found)
     return EvaluationResult(
         case_id=case.case_id,
         score=matched / total,

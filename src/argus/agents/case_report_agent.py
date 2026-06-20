@@ -1,4 +1,5 @@
 """CaseReportAgent — generates audience-specific intelligence products from case evidence."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -57,7 +58,6 @@ Write a finished CTI intelligence product. Include:
 6. Confidence Assessment and Gaps
 7. Recommended Collection (what would close intelligence gaps)
 """,
-
     "soc": """\
 Audience: SOC and Detection Engineering
 Write a detection-focused product. Include:
@@ -68,7 +68,6 @@ Write a detection-focused product. Include:
 5. Recommended Alert Tuning (what to enable, what noise to filter)
 6. Escalation Criteria (what SOC analyst should page on)
 """,
-
     "vm": """\
 Audience: Vulnerability Management
 Write a prioritized vulnerability product. Include:
@@ -79,7 +78,6 @@ Write a prioritized vulnerability product. Include:
 5. Compensating Controls (if patching is not immediately possible)
 6. Timeline Recommendation (patch by date or compensate by date)
 """,
-
     "ir": """\
 Audience: Incident Response Team
 Write an IR-focused product. Include:
@@ -90,7 +88,6 @@ Write an IR-focused product. Include:
 5. Forensic Priorities (what to collect and preserve first, based on TTPs)
 6. Recovery Guidance (what needs verification before returning to production)
 """,
-
     "exec": """\
 Audience: Executive Leadership
 Write a non-technical executive briefing. Include:
@@ -102,7 +99,6 @@ Write a non-technical executive briefing. Include:
 6. Recommended Next Steps (prioritized, owner-assignable)
 Avoid technical jargon. Focus on business risk and decisions, not indicators.
 """,
-
     "awareness": """\
 Audience: Security Awareness / All Staff
 Write a plain-language security awareness notice. Include:
@@ -114,7 +110,6 @@ Write a plain-language security awareness notice. Include:
 6. What NOT to do (common mistakes that make things worse)
 Keep it under 400 words. Use simple language a non-technical employee can act on.
 """,
-
     "redteam": """\
 Audience: Red Team / Adversary Emulation
 Write an adversary emulation brief. Include:
@@ -151,6 +146,7 @@ def _compile_case_prompt(case: Case) -> str:
     if case.observables:
         lines.append("\n## Observables")
         from collections import defaultdict
+
         # Only include manually-added observables — pivot-discovered ones are in Evidence.
         manually_added = [o for o in case.observables if "manually_added" in o.labels]
         pivot_count = sum(1 for o in case.observables if "manually_added" not in o.labels)
@@ -199,9 +195,21 @@ def _compile_case_prompt(case: Case) -> str:
     # Priority score boosts items with high-value keywords that analysts care most about.
     _STATUS_ORDER = {EvidenceStatus.CONFIRMED: 0, EvidenceStatus.INFERRED: 1}
     _HIGH_VALUE_KEYWORDS = {
-        "cisa kev", "weaponized", "c2,", ",c2", "c2 ", " c2", "redline", "asyncrat",
-        "cobalt strike", "mimikatz", "stealer", "infostealer", "ransomware",
-        "unc6395", "malware=",
+        "cisa kev",
+        "weaponized",
+        "c2,",
+        ",c2",
+        "c2 ",
+        " c2",
+        "redline",
+        "asyncrat",
+        "cobalt strike",
+        "mimikatz",
+        "stealer",
+        "infostealer",
+        "ransomware",
+        "unc6395",
+        "malware=",
     }
     _GENERIC_KEYWORDS = {"auto-generated", "scanner", "masscan"}
 
@@ -213,11 +221,13 @@ def _compile_case_prompt(case: Case) -> str:
             return 0  # de-prioritize automated/generic feed items
         return 1
 
-    confirmed_all.sort(key=lambda e: (
-        _STATUS_ORDER.get(e.status, 2),
-        -_priority(e),
-        -(e.confidence or 0.0),
-    ))
+    confirmed_all.sort(
+        key=lambda e: (
+            _STATUS_ORDER.get(e.status, 2),
+            -_priority(e),
+            -(e.confidence or 0.0),
+        )
+    )
 
     # Filter zero-value items (no certs found, no resolutions) — they add noise without intel.
     def _has_value(ev: Any) -> bool:
@@ -231,13 +241,10 @@ def _compile_case_prompt(case: Case) -> str:
 
     # Exclude failures where the same (source, observable) pair has a confirmed record —
     # those are stale pre-fix failures superseded by a successful re-enrichment.
-    confirmed_pairs = {
-        (ev.source_name, oid)
-        for ev in confirmed_all
-        for oid in ev.observable_ids
-    }
+    confirmed_pairs = {(ev.source_name, oid) for ev in confirmed_all for oid in ev.observable_ids}
     meaningful_failed = [
-        ev for ev in failed
+        ev
+        for ev in failed
         if not any((ev.source_name, oid) in confirmed_pairs for oid in ev.observable_ids)
     ]
 
@@ -245,7 +252,9 @@ def _compile_case_prompt(case: Case) -> str:
         shown_failed = meaningful_failed[:10]
         lines.append("\n## Collection Failures (not suitable for claims)")
         if len(meaningful_failed) > 10:
-            lines.append(f"_(Showing 10 of {len(meaningful_failed)} failures — rest omitted for brevity)_")
+            lines.append(
+                f"_(Showing 10 of {len(meaningful_failed)} failures — rest omitted for brevity)_"
+            )
         for ev in shown_failed:
             src = ev.source_name or ev.source_type
             lines.append(f"- _{src}_: {(ev.summary or '')[:80]}")

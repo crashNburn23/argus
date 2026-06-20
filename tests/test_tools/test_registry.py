@@ -1,4 +1,5 @@
 """Parameterized availability tests for the tool registry."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -28,14 +29,18 @@ def _settings(**overrides) -> MagicMock:
 # Always-available tools
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("tool_name", [
-    "mitre_attack_lookup",
-    "nvd_cve_lookup",
-    "urlhaus_lookup",
-    "web_search",
-    "ssl_cert_lookup",
-    "whois_lookup",
-])
+
+@pytest.mark.parametrize(
+    "tool_name",
+    [
+        "mitre_attack_lookup",
+        "nvd_cve_lookup",
+        "urlhaus_lookup",
+        "web_search",
+        "ssl_cert_lookup",
+        "whois_lookup",
+    ],
+)
 def test_always_available(tool_name: str) -> None:
     check = registry._AVAILABILITY[tool_name]
     assert check(_settings()) is True
@@ -45,27 +50,34 @@ def test_always_available(tool_name: str) -> None:
 # Key-gated tools — available iff the API key is configured
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("tool_name,api_key_name", [
-    ("virustotal_lookup", "virustotal"),
-    ("shodan_lookup", "shodan"),
-    ("recorded_future_search", "recorded_future"),
-    ("abuseipdb_check", "abuseipdb"),
-    ("otx_lookup", "otx"),
-    ("passive_dns_lookup", "virustotal"),
-])
+
+@pytest.mark.parametrize(
+    "tool_name,api_key_name",
+    [
+        ("virustotal_lookup", "virustotal"),
+        ("shodan_lookup", "shodan"),
+        ("recorded_future_search", "recorded_future"),
+        ("abuseipdb_check", "abuseipdb"),
+        ("otx_lookup", "otx"),
+        ("passive_dns_lookup", "virustotal"),
+    ],
+)
 def test_key_gated_unavailable_without_key(tool_name: str, api_key_name: str) -> None:
     check = registry._AVAILABILITY[tool_name]
     assert check(_settings()) is False
 
 
-@pytest.mark.parametrize("tool_name,api_key_name", [
-    ("virustotal_lookup", "virustotal"),
-    ("shodan_lookup", "shodan"),
-    ("recorded_future_search", "recorded_future"),
-    ("abuseipdb_check", "abuseipdb"),
-    ("otx_lookup", "otx"),
-    ("passive_dns_lookup", "virustotal"),
-])
+@pytest.mark.parametrize(
+    "tool_name,api_key_name",
+    [
+        ("virustotal_lookup", "virustotal"),
+        ("shodan_lookup", "shodan"),
+        ("recorded_future_search", "recorded_future"),
+        ("abuseipdb_check", "abuseipdb"),
+        ("otx_lookup", "otx"),
+        ("passive_dns_lookup", "virustotal"),
+    ],
+)
 def test_key_gated_available_with_key(tool_name: str, api_key_name: str) -> None:
     check = registry._AVAILABILITY[tool_name]
     s = _settings()
@@ -76,6 +88,7 @@ def test_key_gated_available_with_key(tool_name: str, api_key_name: str) -> None
 # ---------------------------------------------------------------------------
 # MISP — needs a URL
 # ---------------------------------------------------------------------------
+
 
 def test_misp_unavailable_without_url() -> None:
     assert registry._AVAILABILITY["misp_search"](_settings()) is False
@@ -88,6 +101,7 @@ def test_misp_available_with_url() -> None:
 # ---------------------------------------------------------------------------
 # SIEM — file backend
 # ---------------------------------------------------------------------------
+
 
 def test_siem_file_unavailable_without_log_path() -> None:
     s = _settings(siem_type="file", siem_log_path=None)
@@ -102,6 +116,7 @@ def test_siem_file_available_with_log_path() -> None:
 # ---------------------------------------------------------------------------
 # SIEM — Splunk backend (token auth)
 # ---------------------------------------------------------------------------
+
 
 def test_siem_splunk_unavailable_without_url() -> None:
     s = _settings(siem_type="splunk", siem_url=None)
@@ -132,6 +147,7 @@ def test_siem_splunk_available_with_basic_auth() -> None:
 # SIEM — webhook/api backend
 # ---------------------------------------------------------------------------
 
+
 def test_siem_webhook_unavailable_without_url() -> None:
     s = _settings(siem_type="webhook", siem_url=None)
     assert registry._AVAILABILITY["siem_query"](s) is False
@@ -145,6 +161,7 @@ def test_siem_webhook_available_with_url() -> None:
 # ---------------------------------------------------------------------------
 # get_available_tools filters correctly
 # ---------------------------------------------------------------------------
+
 
 def test_get_available_tools_no_keys_returns_free_tools(monkeypatch) -> None:
     monkeypatch.setattr(registry, "get_settings", lambda: _settings())

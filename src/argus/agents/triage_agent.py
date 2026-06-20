@@ -1,4 +1,5 @@
 """Alert Triage Agent — enriches and triages security alerts."""
+
 from __future__ import annotations
 
 import json

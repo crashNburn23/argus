@@ -1,4 +1,5 @@
 """Session persistence — save and reload interactive CLI sessions."""
+
 from __future__ import annotations
 
 import json
@@ -75,14 +76,16 @@ def list_sessions() -> list[dict[str, Any]]:
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
             # Surface only metadata (omit exchanges to keep list lightweight)
-            results.append({
-                "id": data.get("id", p.stem),
-                "title": data.get("title", ""),
-                "model": data.get("model", ""),
-                "created_at": data.get("created_at", ""),
-                "updated_at": data.get("updated_at", ""),
-                "turns": data.get("turns", 0),
-            })
+            results.append(
+                {
+                    "id": data.get("id", p.stem),
+                    "title": data.get("title", ""),
+                    "model": data.get("model", ""),
+                    "created_at": data.get("created_at", ""),
+                    "updated_at": data.get("updated_at", ""),
+                    "turns": data.get("turns", 0),
+                }
+            )
         except Exception:
             continue
 

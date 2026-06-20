@@ -1,4 +1,5 @@
 """Vulnerability Intelligence Agent — CVE research, CISA KEV, exposure analysis."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -85,7 +86,6 @@ class VulnIntelAgent(BaseAgent):
             parts.append(f"Focus on {severity_threshold} and above severity.")
 
         prompt = (
-            "\n".join(parts) if parts
-            else "Provide a summary of recent critical vulnerabilities."
+            "\n".join(parts) if parts else "Provide a summary of recent critical vulnerabilities."
         )
         return await self._run_structured(prompt, VulnIntelResult)

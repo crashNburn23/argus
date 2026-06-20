@@ -1,4 +1,5 @@
 """Report Agent — synthesizes multi-source intelligence into structured CTI reports."""
+
 from __future__ import annotations
 
 import json
@@ -38,14 +39,22 @@ class _ReportNarrative(BaseModel):
                 return {**data, "recommendations": val}
         # Case 2: flat dict of priority→action strings — {"high": "Isolate...", ...}
         result = [
-            {"priority": str(k), "action": str(v) if isinstance(v, str) else str(v), "rationale": ""}
+            {
+                "priority": str(k),
+                "action": str(v) if isinstance(v, str) else str(v),
+                "rationale": "",
+            }
             for k, v in recs.items()
         ]
         return {**data, "recommendations": result}
 
     @field_validator(
-        "introduction", "executive_summary", "analyst_assessment",
-        "ttp_analysis", "threat_landscape", "confidence_assessment",
+        "introduction",
+        "executive_summary",
+        "analyst_assessment",
+        "ttp_analysis",
+        "threat_landscape",
+        "confidence_assessment",
         mode="before",
     )
     @classmethod
@@ -64,7 +73,13 @@ class _ReportNarrative(BaseModel):
             return " ".join(parts)
         return str(v)
 
-    @field_validator("key_findings", "threat_actor_profiles", "campaign_correlations", "references", mode="before")
+    @field_validator(
+        "key_findings",
+        "threat_actor_profiles",
+        "campaign_correlations",
+        "references",
+        mode="before",
+    )
     @classmethod
     def _coerce_str_list(cls, v: Any) -> list[str]:
         if not isinstance(v, list):
@@ -213,9 +228,7 @@ class ReportAgent(BaseAgent):
         prompt = (
             f"Produce a {report.report_type.value} CTI intelligence report. "
             "Correlate the following multi-source intelligence into a coherent"
-            " analytical product:\n\n"
-            + "\n".join(context_parts)
-            + time_note
+            " analytical product:\n\n" + "\n".join(context_parts) + time_note
         )
 
         narrative = await self._run_structured(prompt, _ReportNarrative)

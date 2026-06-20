@@ -1,4 +1,5 @@
 """argus triage — alert triage commands."""
+
 from __future__ import annotations
 
 import asyncio

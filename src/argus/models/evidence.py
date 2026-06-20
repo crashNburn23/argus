@@ -110,4 +110,3 @@ class Relationship(BaseModel):
     last_seen: datetime | None = None
     rationale: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
-

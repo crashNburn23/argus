@@ -1,4 +1,5 @@
 """Threat Actor Research Agent — researches threat groups, campaigns, and TTPs."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -120,8 +121,5 @@ class ThreatActorAgent(BaseAgent):
         if include_iocs:
             extras.append("Include known associated IOCs where available.")
 
-        prompt = (
-            f"Research this threat actor/campaign: {query}\n"
-            + "\n".join(extras)
-        )
+        prompt = f"Research this threat actor/campaign: {query}\n" + "\n".join(extras)
         return await self._run_structured(prompt, ThreatActorResearchResult)

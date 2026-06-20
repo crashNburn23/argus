@@ -26,4 +26,3 @@ def test_reference_reports_receive_full_score() -> None:
         result = evaluate_report(case, report)
 
         assert result.score == 1.0, case.case_id
-

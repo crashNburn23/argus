@@ -90,9 +90,13 @@ def test_benchmark_save_baseline_writes_file(tmp_path) -> None:
         result = CliRunner().invoke(
             app,
             [
-                "benchmark", "run", "--all",
-                "--output-dir", str(tmp_path),
-                "--save-baseline", str(baseline_path),
+                "benchmark",
+                "run",
+                "--all",
+                "--output-dir",
+                str(tmp_path),
+                "--save-baseline",
+                str(baseline_path),
             ],
         )
 
@@ -108,10 +112,7 @@ def test_benchmark_compare_baseline_shows_delta(tmp_path) -> None:
     baseline = {
         "model": "test-model",
         "average_score": 0.5,
-        "results": [
-            {"case_id": f"IR-{i:04d}", "score": 0.5}
-            for i in range(1, 9)
-        ],
+        "results": [{"case_id": f"IR-{i:04d}", "score": 0.5} for i in range(1, 9)],
     }
     baseline_path = tmp_path / "baseline.json"
     baseline_path.write_text(json.dumps(baseline))
@@ -123,9 +124,14 @@ def test_benchmark_compare_baseline_shows_delta(tmp_path) -> None:
         result = CliRunner().invoke(
             app,
             [
-                "benchmark", "run", "--all", "--json",
-                "--output-dir", str(tmp_path),
-                "--compare", str(baseline_path),
+                "benchmark",
+                "run",
+                "--all",
+                "--json",
+                "--output-dir",
+                str(tmp_path),
+                "--compare",
+                str(baseline_path),
             ],
         )
 
@@ -140,8 +146,11 @@ def test_benchmark_compare_missing_baseline_exits(tmp_path) -> None:
     result = CliRunner().invoke(
         app,
         [
-            "benchmark", "run", "--all",
-            "--compare", str(tmp_path / "nonexistent.json"),
+            "benchmark",
+            "run",
+            "--all",
+            "--compare",
+            str(tmp_path / "nonexistent.json"),
         ],
     )
 
@@ -156,9 +165,12 @@ def test_benchmark_jsonl_outputs_one_line_per_case(tmp_path) -> None:
         result = CliRunner().invoke(
             app,
             [
-                "benchmark", "run", "--all",
+                "benchmark",
+                "run",
+                "--all",
                 "--jsonl",
-                "--output-dir", str(tmp_path),
+                "--output-dir",
+                str(tmp_path),
             ],
         )
 

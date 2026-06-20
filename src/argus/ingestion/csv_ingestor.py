@@ -5,6 +5,7 @@ observable classification (same heuristic table as the JSON ingestor).
 
 Used by `case extract` when an artifact's content looks like a CSV table.
 """
+
 from __future__ import annotations
 
 import csv

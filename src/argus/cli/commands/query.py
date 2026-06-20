@@ -1,4 +1,5 @@
 """argus query — natural language query via orchestrator."""
+
 from __future__ import annotations
 
 import asyncio

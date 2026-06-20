@@ -32,6 +32,7 @@ def test_doctor_fails_when_required_model_key_is_missing(monkeypatch) -> None:
 # SIEM diagnostics
 # ---------------------------------------------------------------------------
 
+
 def _siem_check(monkeypatch, **env_vars) -> dict:
     for key, value in env_vars.items():
         monkeypatch.setenv(key, value)
@@ -117,12 +118,14 @@ def test_siem_unsupported_type(monkeypatch) -> None:
 # Disclosure mode diagnostics
 # ---------------------------------------------------------------------------
 
+
 def _disclosure_check(monkeypatch, **env_vars) -> dict:
     for key, value in env_vars.items():
         monkeypatch.setenv(key, value)
     get_settings.cache_clear()
     settings = get_settings()
     from argus.diagnostics import _disclosure_check as _dc
+
     return _dc(settings)
 
 

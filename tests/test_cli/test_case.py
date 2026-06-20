@@ -207,26 +207,28 @@ def test_case_extract_stix_bundle_creates_observables() -> None:
     created = runner.invoke(app, ["case", "create", "STIX test", "--json"])
     case_id = _json.loads(created.stdout)["case_id"]
 
-    stix_bundle = _json.dumps({
-        "type": "bundle",
-        "id": "bundle--00000000-0000-0000-0000-000000000099",
-        "objects": [
-            {
-                "type": "indicator",
-                "id": "indicator--stix-test-ip",
-                "name": "Known C2",
-                "pattern": "[ipv4-addr:value = '203.0.113.42']",
-                "confidence": 85,
-            },
-            {
-                "type": "threat-actor",
-                "id": "threat-actor--apt99",
-                "name": "APT99",
-                "aliases": ["FancyWidget"],
-                "confidence": 80,
-            },
-        ],
-    })
+    stix_bundle = _json.dumps(
+        {
+            "type": "bundle",
+            "id": "bundle--00000000-0000-0000-0000-000000000099",
+            "objects": [
+                {
+                    "type": "indicator",
+                    "id": "indicator--stix-test-ip",
+                    "name": "Known C2",
+                    "pattern": "[ipv4-addr:value = '203.0.113.42']",
+                    "confidence": 85,
+                },
+                {
+                    "type": "threat-actor",
+                    "id": "threat-actor--apt99",
+                    "name": "APT99",
+                    "aliases": ["FancyWidget"],
+                    "confidence": 80,
+                },
+            ],
+        }
+    )
 
     artifact = runner.invoke(
         app,
@@ -249,6 +251,7 @@ def test_case_extract_stix_bundle_creates_observables() -> None:
 def test_case_enrich_creates_evidence_from_mock_tools(monkeypatch) -> None:
     monkeypatch.setenv("ABUSEIPDB_API_KEY", "test-abuseipdb-key")
     from argus.config.settings import get_settings
+
     get_settings.cache_clear()
 
     runner = CliRunner()
@@ -269,25 +272,29 @@ def test_case_enrich_creates_evidence_from_mock_tools(monkeypatch) -> None:
     )
     runner.invoke(app, ["case", "extract", case_id])
 
-    abuseipdb_result = json.dumps({
-        "ip_address": "198.51.100.10",
-        "abuse_confidence_score": 87,
-        "total_reports": 42,
-        "country_code": "DE",
-    })
-    nvd_result = json.dumps({
-        "total_results": 1,
-        "vulnerabilities": [
-            {
-                "cve_id": "CVE-2021-44228",
-                "cvss_v3_score": 10.0,
-                "severity": "critical",
-                "in_cisa_kev": True,
-                "description": "Log4Shell",
-            }
-        ],
-        "cisa_kev_matches": ["CVE-2021-44228"],
-    })
+    abuseipdb_result = json.dumps(
+        {
+            "ip_address": "198.51.100.10",
+            "abuse_confidence_score": 87,
+            "total_reports": 42,
+            "country_code": "DE",
+        }
+    )
+    nvd_result = json.dumps(
+        {
+            "total_results": 1,
+            "vulnerabilities": [
+                {
+                    "cve_id": "CVE-2021-44228",
+                    "cvss_v3_score": 10.0,
+                    "severity": "critical",
+                    "in_cisa_kev": True,
+                    "description": "Log4Shell",
+                }
+            ],
+            "cisa_kev_matches": ["CVE-2021-44228"],
+        }
+    )
 
     with (
         patch(
@@ -331,13 +338,21 @@ def test_case_enrich_skips_already_enriched_observables() -> None:
     )
     runner.invoke(app, ["case", "extract", case_id])
 
-    nvd_result = json.dumps({
-        "total_results": 1,
-        "vulnerabilities": [{"cve_id": "CVE-2021-44228", "cvss_v3_score": 10.0,
-                              "severity": "critical", "in_cisa_kev": True,
-                              "description": "Log4Shell"}],
-        "cisa_kev_matches": ["CVE-2021-44228"],
-    })
+    nvd_result = json.dumps(
+        {
+            "total_results": 1,
+            "vulnerabilities": [
+                {
+                    "cve_id": "CVE-2021-44228",
+                    "cvss_v3_score": 10.0,
+                    "severity": "critical",
+                    "in_cisa_kev": True,
+                    "description": "Log4Shell",
+                }
+            ],
+            "cisa_kev_matches": ["CVE-2021-44228"],
+        }
+    )
 
     with patch(
         "argus.tools.nvd.nvd_cve_lookup", new_callable=AsyncMock, return_value=nvd_result
@@ -384,9 +399,7 @@ def test_case_report_generates_markdown_from_evidence() -> None:
         app,
         ["case", "pir", case_id, "What actor is exploiting Log4Shell?", "--priority", "high"],
     )
-    runner.invoke(
-        app, ["case", "note", case_id, "Indicator confirmed via threat intel feed."]
-    )
+    runner.invoke(app, ["case", "note", case_id, "Indicator confirmed via threat intel feed."])
 
     result = runner.invoke(app, ["case", "report", case_id, "--no-save"])
     assert result.exit_code == 0
@@ -398,6 +411,7 @@ def test_case_report_generates_markdown_from_evidence() -> None:
 def test_case_pivot_creates_relationships_and_discovers_observables(monkeypatch) -> None:
     monkeypatch.setenv("VIRUSTOTAL_API_KEY", "test-vt-key")
     from argus.config.settings import get_settings
+
     get_settings.cache_clear()
 
     runner = CliRunner()
@@ -418,37 +432,45 @@ def test_case_pivot_creates_relationships_and_discovers_observables(monkeypatch)
     )
     runner.invoke(app, ["case", "extract", case_id])
 
-    pdns_ip_result = json.dumps({
-        "indicator": "198.51.100.10",
-        "indicator_type": "ip",
-        "resolution_count": 2,
-        "resolutions": [
-            {"date": "2026-01-01", "resolver": "pdns", "hostname": "pivot-host1.example"},
-            {"date": "2026-01-02", "resolver": "pdns", "hostname": "malware.example"},
-        ],
-    })
-    pdns_domain_result = json.dumps({
-        "indicator": "malware.example",
-        "indicator_type": "domain",
-        "resolution_count": 1,
-        "resolutions": [
-            {"date": "2026-01-01", "resolver": "pdns", "ip_address": "198.51.100.10"},
-        ],
-    })
-    whois_result = json.dumps({
-        "domain": "malware.example",
-        "source": "rdap",
-        "registrar": "BadRegistrar Inc",
-        "creation_date": "2025-12-01T00:00:00Z",
-        "nameservers": ["ns1.bad-dns.com"],
-    })
-    cert_result = json.dumps({
-        "indicator": "malware.example",
-        "indicator_type": "domain",
-        "cert_count": 1,
-        "certs": [],
-        "all_sans": ["malware.example", "malware2.example"],
-    })
+    pdns_ip_result = json.dumps(
+        {
+            "indicator": "198.51.100.10",
+            "indicator_type": "ip",
+            "resolution_count": 2,
+            "resolutions": [
+                {"date": "2026-01-01", "resolver": "pdns", "hostname": "pivot-host1.example"},
+                {"date": "2026-01-02", "resolver": "pdns", "hostname": "malware.example"},
+            ],
+        }
+    )
+    pdns_domain_result = json.dumps(
+        {
+            "indicator": "malware.example",
+            "indicator_type": "domain",
+            "resolution_count": 1,
+            "resolutions": [
+                {"date": "2026-01-01", "resolver": "pdns", "ip_address": "198.51.100.10"},
+            ],
+        }
+    )
+    whois_result = json.dumps(
+        {
+            "domain": "malware.example",
+            "source": "rdap",
+            "registrar": "BadRegistrar Inc",
+            "creation_date": "2025-12-01T00:00:00Z",
+            "nameservers": ["ns1.bad-dns.com"],
+        }
+    )
+    cert_result = json.dumps(
+        {
+            "indicator": "malware.example",
+            "indicator_type": "domain",
+            "cert_count": 1,
+            "certs": [],
+            "all_sans": ["malware.example", "malware2.example"],
+        }
+    )
 
     with (
         patch(
@@ -483,16 +505,13 @@ def test_case_pivot_creates_relationships_and_discovers_observables(monkeypatch)
     assert "resolves_to" in rel_types
 
     ev_sources = {
-        ev["metadata"].get("pivot_source")
-        for ev in case_data["evidence"]
-        if ev.get("metadata")
+        ev["metadata"].get("pivot_source") for ev in case_data["evidence"] if ev.get("metadata")
     }
     assert "passive_dns" in ev_sources
     assert "whois" in ev_sources
 
     whois_ev = next(
-        ev for ev in case_data["evidence"]
-        if ev.get("metadata", {}).get("pivot_source") == "whois"
+        ev for ev in case_data["evidence"] if ev.get("metadata", {}).get("pivot_source") == "whois"
     )
     assert "BadRegistrar" in whois_ev["summary"]
 
@@ -500,6 +519,7 @@ def test_case_pivot_creates_relationships_and_discovers_observables(monkeypatch)
 def test_case_pivot_skips_already_pivoted_observables(monkeypatch) -> None:
     monkeypatch.setenv("VIRUSTOTAL_API_KEY", "test-vt-key")
     from argus.config.settings import get_settings
+
     get_settings.cache_clear()
 
     runner = CliRunner()
@@ -512,19 +532,31 @@ def test_case_pivot_skips_already_pivoted_observables(monkeypatch) -> None:
     )
     runner.invoke(app, ["case", "extract", case_id])
 
-    pdns_result = json.dumps({"indicator": "malware.example", "indicator_type": "domain",
-                               "resolution_count": 0, "resolutions": []})
+    pdns_result = json.dumps(
+        {
+            "indicator": "malware.example",
+            "indicator_type": "domain",
+            "resolution_count": 0,
+            "resolutions": [],
+        }
+    )
     whois_result = json.dumps({"domain": "malware.example", "registrar": "Reg Inc"})
-    cert_result = json.dumps({"indicator": "malware.example", "cert_count": 0, "certs": [],
-                               "all_sans": []})
+    cert_result = json.dumps(
+        {"indicator": "malware.example", "cert_count": 0, "certs": [], "all_sans": []}
+    )
 
     with (
-        patch("argus.tools.passive_dns.passive_dns_lookup", new_callable=AsyncMock,
-              return_value=pdns_result) as mock_pdns,
-        patch("argus.tools.certs.ssl_cert_lookup", new_callable=AsyncMock,
-              return_value=cert_result),
-        patch("argus.tools.whois.whois_lookup", new_callable=AsyncMock,
-              return_value=whois_result) as mock_whois,
+        patch(
+            "argus.tools.passive_dns.passive_dns_lookup",
+            new_callable=AsyncMock,
+            return_value=pdns_result,
+        ) as mock_pdns,
+        patch(
+            "argus.tools.certs.ssl_cert_lookup", new_callable=AsyncMock, return_value=cert_result
+        ),
+        patch(
+            "argus.tools.whois.whois_lookup", new_callable=AsyncMock, return_value=whois_result
+        ) as mock_whois,
     ):
         runner.invoke(app, ["case", "pivot", case_id])
         first_pdns = mock_pdns.call_count
@@ -559,9 +591,7 @@ def test_case_analyze_generates_llm_report_and_stores_artifact() -> None:
         new_callable=AsyncMock,
         return_value=fake_report,
     ):
-        result = runner.invoke(
-            app, ["case", "analyze", case_id, "--audience", "cti", "--no-save"]
-        )
+        result = runner.invoke(app, ["case", "analyze", case_id, "--audience", "cti", "--no-save"])
 
     assert result.exit_code == 0, result.output or result.stderr
     assert "CTI Report" in result.output or "Findings" in result.output
@@ -572,9 +602,7 @@ def test_case_analyze_stores_report_artifact_on_case() -> None:
 
     created = runner.invoke(app, ["case", "create", "Store report", "--json"])
     case_id = json.loads(created.stdout)["case_id"]
-    runner.invoke(
-        app, ["case", "artifact", case_id, "--text", "198.51.100.10", "--type", "report"]
-    )
+    runner.invoke(app, ["case", "artifact", case_id, "--text", "198.51.100.10", "--type", "report"])
     runner.invoke(app, ["case", "extract", case_id])
 
     with patch(
@@ -603,9 +631,7 @@ def test_case_report_json_output_stores_report_artifact() -> None:
     created = runner.invoke(app, ["case", "create", "JSON report test", "--json"])
     case_id = json.loads(created.stdout)["case_id"]
 
-    result = runner.invoke(
-        app, ["case", "report", case_id, "--save", "--json"]
-    )
+    result = runner.invoke(app, ["case", "report", case_id, "--save", "--json"])
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["report_type"] == "cti"
@@ -644,14 +670,10 @@ def test_case_timeline_shows_events_in_order() -> None:
 
     created = runner.invoke(app, ["case", "create", "Timeline test", "--json"])
     case_id = json.loads(created.stdout)["case_id"]
-    runner.invoke(
-        app, ["case", "artifact", case_id, "--text", "198.51.100.10", "--type", "alert"]
-    )
+    runner.invoke(app, ["case", "artifact", case_id, "--text", "198.51.100.10", "--type", "alert"])
     runner.invoke(app, ["case", "extract", case_id])
     runner.invoke(app, ["case", "note", case_id, "Analyst observation"])
-    runner.invoke(
-        app, ["case", "pir", case_id, "Who is responsible?", "--priority", "high"]
-    )
+    runner.invoke(app, ["case", "pir", case_id, "Who is responsible?", "--priority", "high"])
 
     result = runner.invoke(app, ["case", "timeline", case_id, "--json"])
     assert result.exit_code == 0
@@ -672,8 +694,8 @@ def test_case_analyze_with_review_flag_shows_grounding_result() -> None:
     created = runner.invoke(app, ["case", "create", "Review test", "--json"])
     case_id = json.loads(created.stdout)["case_id"]
     runner.invoke(
-        app, ["case", "artifact", case_id, "--text", "198.51.100.10 CVE-2021-44228",
-               "--type", "report"]
+        app,
+        ["case", "artifact", case_id, "--text", "198.51.100.10 CVE-2021-44228", "--type", "report"],
     )
     runner.invoke(app, ["case", "extract", case_id])
 

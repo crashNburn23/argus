@@ -1,4 +1,5 @@
 """WebSocket chat endpoint — streams orchestrator progress to the browser."""
+
 from __future__ import annotations
 
 import asyncio
@@ -98,11 +99,7 @@ async def chat_ws(websocket: WebSocket) -> None:
             mode: str = msg.get("mode", "global")
             case_id: str | None = msg.get("case_id")
 
-            query = (
-                _build_case_query(text, case_id)
-                if mode == "case" and case_id
-                else text
-            )
+            query = _build_case_query(text, case_id) if mode == "case" and case_id else text
 
             loop = asyncio.get_event_loop()
             queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
@@ -120,14 +117,10 @@ async def chat_ws(websocket: WebSocket) -> None:
 
                     if m == "case" and cid:
                         try:
-                            note = CaseNote(
-                                body=f"**Q:** {original_text}\n\n**A:**\n{result}"
-                            )
+                            note = CaseNote(body=f"**Q:** {original_text}\n\n**A:**\n{result}")
                             CaseStore().update(
                                 cid,
-                                lambda c: c.model_copy(
-                                    update={"notes": [*c.notes, note]}
-                                ),
+                                lambda c: c.model_copy(update={"notes": [*c.notes, note]}),
                             )
                         except Exception:
                             pass

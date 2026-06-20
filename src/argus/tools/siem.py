@@ -1,4 +1,5 @@
 """SIEM connector — splunk, webhook, and file backends via SIEM_TYPE setting."""
+
 from __future__ import annotations
 
 import asyncio
@@ -85,6 +86,7 @@ def _splunk_time_range(time_range: str) -> tuple[str, str]:
 # Splunk REST API backend
 # ---------------------------------------------------------------------------
 
+
 async def _query_splunk(query: str, time_range: str, limit: int) -> list[dict[str, Any]]:
     settings = get_settings()
     base_url = settings.siem_url
@@ -103,12 +105,14 @@ async def _query_splunk(query: str, time_range: str, limit: int) -> list[dict[st
             settings.splunk_password.get_secret_value(),
         )
     else:
-        return [{
-            "error": (
-                "Splunk auth not configured — set SIEM_API_KEY (token) "
-                "or SPLUNK_USERNAME + SPLUNK_PASSWORD"
-            )
-        }]
+        return [
+            {
+                "error": (
+                    "Splunk auth not configured — set SIEM_API_KEY (token) "
+                    "or SPLUNK_USERNAME + SPLUNK_PASSWORD"
+                )
+            }
+        ]
 
     spl = query.strip()
     if not spl.lower().startswith("search ") and not spl.startswith("|"):
@@ -164,6 +168,7 @@ async def _query_splunk(query: str, time_range: str, limit: int) -> list[dict[st
 # Webhook / generic API backend
 # ---------------------------------------------------------------------------
 
+
 async def _query_webhook(query: str, time_range: str, limit: int) -> list[dict[str, Any]]:
     settings = get_settings()
     if not settings.siem_url:
@@ -188,12 +193,14 @@ async def _query_webhook(query: str, time_range: str, limit: int) -> list[dict[s
 # File backend
 # ---------------------------------------------------------------------------
 
+
 async def _query_file(query: str, limit: int) -> list[dict[str, Any]]:
     settings = get_settings()
     if not settings.siem_log_path:
         return [{"error": "SIEM_LOG_PATH not configured"}]
 
     import os
+
     if not os.path.exists(settings.siem_log_path):
         return [{"error": f"Log file not found: {settings.siem_log_path}"}]
 
@@ -216,6 +223,7 @@ async def _query_file(query: str, limit: int) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
+
 
 async def siem_query(
     query: str,

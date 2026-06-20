@@ -1,4 +1,5 @@
 """argus research — threat actor and campaign research commands."""
+
 from __future__ import annotations
 
 import asyncio

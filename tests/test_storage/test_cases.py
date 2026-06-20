@@ -71,9 +71,7 @@ def test_case_store_lists_cases_by_updated_at(tmp_path: Path) -> None:
 
 def test_case_store_update_and_delete(tmp_path: Path) -> None:
     store = CaseStore(tmp_path)
-    case = store.create(
-        Case(title="Initial", updated_at=datetime(2026, 1, 1, tzinfo=UTC))
-    )
+    case = store.create(Case(title="Initial", updated_at=datetime(2026, 1, 1, tzinfo=UTC)))
 
     updated = store.update(
         case.case_id,

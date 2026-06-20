@@ -1,4 +1,5 @@
 """AlienVault OTX tool — requires OTX_API_KEY."""
+
 from __future__ import annotations
 
 import json
@@ -12,6 +13,7 @@ from argus.storage.cache import cache_get, cache_set, get_rate_limiter
 from argus.tools.http import get_client
 
 _BASE = "https://otx.alienvault.com/api/v1/indicators"
+
 
 def _as_list(val: Any) -> list[Any]:
     """Normalize OTX fields that may be a list, a single string, or None."""
@@ -95,18 +97,30 @@ async def otx_lookup(indicator: str, indicator_type: str) -> str:
             "indicator": indicator,
             "indicator_type": indicator_type,
             "pulse_count": pulses.get("count", 0),
-            "malware_families": list({
-                str(f) for p in pulses.get("pulses", [])
-                for f in _as_list(p.get("malware_families")) if f and not isinstance(f, dict)
-            })[:20],
-            "tags": list({
-                str(t) for p in pulses.get("pulses", [])
-                for t in _as_list(p.get("tags")) if t and not isinstance(t, dict)
-            })[:20],
-            "adversaries": list({
-                str(adv) for p in pulses.get("pulses", [])
-                for adv in _as_list(p.get("adversary")) if adv and not isinstance(adv, dict)
-            })[:10],
+            "malware_families": list(
+                {
+                    str(f)
+                    for p in pulses.get("pulses", [])
+                    for f in _as_list(p.get("malware_families"))
+                    if f and not isinstance(f, dict)
+                }
+            )[:20],
+            "tags": list(
+                {
+                    str(t)
+                    for p in pulses.get("pulses", [])
+                    for t in _as_list(p.get("tags"))
+                    if t and not isinstance(t, dict)
+                }
+            )[:20],
+            "adversaries": list(
+                {
+                    str(adv)
+                    for p in pulses.get("pulses", [])
+                    for adv in _as_list(p.get("adversary"))
+                    if adv and not isinstance(adv, dict)
+                }
+            )[:10],
             "recent_pulses": [
                 {
                     "name": p.get("name", ""),

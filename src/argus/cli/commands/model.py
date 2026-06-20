@@ -1,4 +1,5 @@
 """Select the LLM provider and model used by Argus."""
+
 from __future__ import annotations
 
 from pathlib import Path

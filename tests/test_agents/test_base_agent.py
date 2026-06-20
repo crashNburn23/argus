@@ -1,4 +1,5 @@
 """Integration tests for BaseAgent — uses a fake LLM client, no live calls."""
+
 from __future__ import annotations
 
 import json
@@ -16,9 +17,11 @@ from argus.llm.client import LLMResponse, TextBlock, ToolUseBlock, Usage
 # Fake LLM infrastructure
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FakeResponse:
     """One canned response to serve from FakeLLMClient."""
+
     text: str | None = None
     tool_name: str | None = None
     tool_input: dict[str, Any] = field(default_factory=dict)
@@ -89,6 +92,7 @@ def _make_agent(responses: list[FakeResponse]) -> _SimpleAgent:
 # Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_run_structured_success():
     payload = json.dumps({"value": "hello", "score": 42})
@@ -100,7 +104,7 @@ async def test_run_structured_success():
 
 @pytest.mark.asyncio
 async def test_run_structured_strips_markdown_fences():
-    payload = "```json\n{\"value\": \"fenced\", \"score\": 1}\n```"
+    payload = '```json\n{"value": "fenced", "score": 1}\n```'
     agent = _make_agent([FakeResponse(text=payload)])
     result = await agent._run_structured("do something", _SimpleResult)
     assert result.value == "fenced"
@@ -128,10 +132,12 @@ async def test_run_structured_schema_validation_failure():
 async def test_run_structured_retries_on_bad_json_then_succeeds():
     """First response is garbage; second attempt returns valid JSON after correction."""
     good_payload = json.dumps({"value": "fixed", "score": 7})
-    agent = _make_agent([
-        FakeResponse(text="oops not json"),
-        FakeResponse(text=good_payload),
-    ])
+    agent = _make_agent(
+        [
+            FakeResponse(text="oops not json"),
+            FakeResponse(text=good_payload),
+        ]
+    )
     result = await agent._run_structured("do something", _SimpleResult, max_parse_retries=1)
     assert result.value == "fixed"
     # Two calls: one failed parse, one successful
@@ -141,10 +147,17 @@ async def test_run_structured_retries_on_bad_json_then_succeeds():
 @pytest.mark.asyncio
 async def test_loop_exhaustion_raises_agent_error():
     """If the model keeps requesting tool_use forever, we raise LOOP_EXHAUSTED."""
+
     class _ToolAgent(_SimpleAgent):
         def get_tool_definitions(self):
-            return [{"name": "noop", "description": "x",
-                     "input_schema": {"type": "object", "properties": {}}}]
+            return [
+                {
+                    "name": "noop",
+                    "description": "x",
+                    "input_schema": {"type": "object", "properties": {}},
+                }
+            ]
+
         async def dispatch_tool(self, tool_name, tool_input):
             return json.dumps({"ok": True})
 
@@ -168,19 +181,28 @@ async def test_unexpected_stop_reason_raises_agent_error():
 @pytest.mark.asyncio
 async def test_tool_use_then_end_turn():
     """One tool call followed by a text response succeeds."""
+
     class _ToolAgent(_SimpleAgent):
         def get_tool_definitions(self):
-            return [{"name": "lookup", "description": "x",
-                     "input_schema": {"type": "object", "properties": {}}}]
+            return [
+                {
+                    "name": "lookup",
+                    "description": "x",
+                    "input_schema": {"type": "object", "properties": {}},
+                }
+            ]
+
         async def dispatch_tool(self, tool_name, tool_input):
             return json.dumps({"data": "found"})
 
     good = json.dumps({"value": "enriched", "score": 9})
     agent = _ToolAgent.__new__(_ToolAgent)
-    agent.client = FakeLLMClient([
-        FakeResponse(tool_name="lookup", stop_reason="tool_use"),
-        FakeResponse(text=good),
-    ])
+    agent.client = FakeLLMClient(
+        [
+            FakeResponse(tool_name="lookup", stop_reason="tool_use"),
+            FakeResponse(text=good),
+        ]
+    )
     agent.model = "fake"
 
     result = await agent._run_structured("enrich", _SimpleResult)

@@ -1,4 +1,5 @@
 """URLhaus lookup tool — no API key required."""
+
 from __future__ import annotations
 
 import json
@@ -84,8 +85,11 @@ async def urlhaus_lookup(
             "urls_count": len(data.get("urls", [])),
             "payloads_count": len(data.get("payloads", [])),
             "urls": [
-                {"url": u.get("url", ""), "url_status": u.get("url_status", ""),
-                 "threat": u.get("threat", "")}
+                {
+                    "url": u.get("url", ""),
+                    "url_status": u.get("url_status", ""),
+                    "threat": u.get("threat", ""),
+                }
                 for u in data.get("urls", [])[:10]
             ],
         }

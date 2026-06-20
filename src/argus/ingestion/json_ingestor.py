@@ -6,6 +6,7 @@ observables with higher fidelity than regex alone by using field name heuristics
 Used by `case extract` when an artifact's content is a JSON array but not a
 STIX bundle.
 """
+
 from __future__ import annotations
 
 import re
@@ -19,53 +20,118 @@ from argus.models.evidence import EvidenceItem, EvidenceStatus, Observable, Obse
 # Field-name heuristics: map well-known field names to observable types
 # ---------------------------------------------------------------------------
 
-_IP_FIELDS = frozenset({
-    "src_ip", "dst_ip", "source_ip", "dest_ip", "destination_ip",
-    "client_ip", "server_ip", "remote_ip", "local_ip", "ip", "ip_address",
-    "src", "dst", "source", "destination",
-    "srcip", "dstip", "sourceip", "destip",
-    "src_addr", "dst_addr", "source_addr", "dest_addr",
-    "attacker_ip", "victim_ip", "c2_ip", "beacon_ip",
-})
-
-_DOMAIN_FIELDS = frozenset({
-    "domain", "hostname", "fqdn", "host", "dest_host", "src_host",
-    "dns_query", "queried_domain", "resolved_domain", "target_domain",
-    "c2_domain", "beacon_domain", "referrer_host",
-})
-
-_URL_FIELDS = frozenset({
-    "url", "uri", "request_url", "http_url", "full_url",
-    "c2_url", "download_url", "referrer", "redirect_url",
-})
-
-_HASH_FIELDS = frozenset({
-    "md5", "sha1", "sha256", "sha512", "file_hash", "hash", "filehash",
-    "process_md5", "process_sha256", "parent_md5", "parent_sha256",
-    "dropped_hash", "artifact_hash",
-})
-
-_CVE_FIELDS = frozenset({
-    "cve", "cve_id", "vulnerability", "vuln_id",
-})
-
-_EMAIL_FIELDS = frozenset({
-    "email", "sender", "recipient", "from", "to", "reply_to",
-    "sender_email", "recipient_email",
-})
-
-_IP_RE = re.compile(
-    r"^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$"
+_IP_FIELDS = frozenset(
+    {
+        "src_ip",
+        "dst_ip",
+        "source_ip",
+        "dest_ip",
+        "destination_ip",
+        "client_ip",
+        "server_ip",
+        "remote_ip",
+        "local_ip",
+        "ip",
+        "ip_address",
+        "src",
+        "dst",
+        "source",
+        "destination",
+        "srcip",
+        "dstip",
+        "sourceip",
+        "destip",
+        "src_addr",
+        "dst_addr",
+        "source_addr",
+        "dest_addr",
+        "attacker_ip",
+        "victim_ip",
+        "c2_ip",
+        "beacon_ip",
+    }
 )
+
+_DOMAIN_FIELDS = frozenset(
+    {
+        "domain",
+        "hostname",
+        "fqdn",
+        "host",
+        "dest_host",
+        "src_host",
+        "dns_query",
+        "queried_domain",
+        "resolved_domain",
+        "target_domain",
+        "c2_domain",
+        "beacon_domain",
+        "referrer_host",
+    }
+)
+
+_URL_FIELDS = frozenset(
+    {
+        "url",
+        "uri",
+        "request_url",
+        "http_url",
+        "full_url",
+        "c2_url",
+        "download_url",
+        "referrer",
+        "redirect_url",
+    }
+)
+
+_HASH_FIELDS = frozenset(
+    {
+        "md5",
+        "sha1",
+        "sha256",
+        "sha512",
+        "file_hash",
+        "hash",
+        "filehash",
+        "process_md5",
+        "process_sha256",
+        "parent_md5",
+        "parent_sha256",
+        "dropped_hash",
+        "artifact_hash",
+    }
+)
+
+_CVE_FIELDS = frozenset(
+    {
+        "cve",
+        "cve_id",
+        "vulnerability",
+        "vuln_id",
+    }
+)
+
+_EMAIL_FIELDS = frozenset(
+    {
+        "email",
+        "sender",
+        "recipient",
+        "from",
+        "to",
+        "reply_to",
+        "sender_email",
+        "recipient_email",
+    }
+)
+
+_IP_RE = re.compile(r"^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$")
 _MD5_RE = re.compile(r"^[0-9a-fA-F]{32}$")
 _SHA1_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,7}$", re.IGNORECASE)
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-_PRIVATE_IP_RE = re.compile(
-    r"^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|0\.|169\.254\.)"
-)
+_PRIVATE_IP_RE = re.compile(r"^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|0\.|169\.254\.)")
 
 
 @dataclass
@@ -182,12 +248,7 @@ def ingest_json_alerts(data: list[Any] | dict[str, Any]) -> JsonIngestResult:
                 record_obs.append(obs)
 
         if record_obs:
-            alert_id = (
-                record.get("alert_id")
-                or record.get("id")
-                or record.get("event_id")
-                or ""
-            )
+            alert_id = record.get("alert_id") or record.get("id") or record.get("event_id") or ""
             ev = EvidenceItem(
                 source_name="json_import",
                 source_type="json_import",
@@ -211,6 +272,7 @@ def is_json_alert_array(text: str) -> bool:
         return False
     try:
         import json
+
         data = json.loads(text)
         return isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict)
     except (ValueError, TypeError):

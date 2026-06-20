@@ -1,4 +1,5 @@
 """Shodan tool — requires SHODAN_API_KEY."""
+
 from __future__ import annotations
 
 import asyncio
@@ -44,6 +45,7 @@ async def shodan_lookup(
 
     try:
         import shodan as shodan_lib
+
         api = shodan_lib.Shodan(settings.api_key("shodan"))
 
         if ip:
@@ -60,8 +62,12 @@ async def shodan_lookup(
                 "vulns": list(_vulns.keys() if isinstance(_vulns, dict) else _vulns)[:20],
                 "tags": host.get("tags", []),
                 "services": [
-                    {"port": s.get("port"), "transport": s.get("transport", ""),
-                     "product": s.get("product", ""), "version": s.get("version", "")}
+                    {
+                        "port": s.get("port"),
+                        "transport": s.get("transport", ""),
+                        "product": s.get("product", ""),
+                        "version": s.get("version", ""),
+                    }
                     for s in host.get("data", [])[:10]
                 ],
             }

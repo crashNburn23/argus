@@ -20,20 +20,22 @@ def test_ollama_converts_tools_and_tool_results() -> None:
     }
     assert OllamaClient._convert_tool(tool)["function"]["parameters"] == tool["input_schema"]
 
-    converted = OllamaClient._convert_messages([
-        {"role": "user", "content": "Check 1.2.3.4"},
-        {
-            "role": "assistant",
-            "content": [
-                TextBlock("Checking."),
-                ToolUseBlock(id="call-1", name="lookup", input={"indicator": "1.2.3.4"}),
-            ],
-        },
-        {
-            "role": "user",
-            "content": [{"type": "tool_result", "tool_use_id": "call-1", "content": "{}"}],
-        },
-    ])
+    converted = OllamaClient._convert_messages(
+        [
+            {"role": "user", "content": "Check 1.2.3.4"},
+            {
+                "role": "assistant",
+                "content": [
+                    TextBlock("Checking."),
+                    ToolUseBlock(id="call-1", name="lookup", input={"indicator": "1.2.3.4"}),
+                ],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "call-1", "content": "{}"}],
+            },
+        ]
+    )
 
     assert converted[1]["tool_calls"][0]["function"]["name"] == "lookup"
     assert converted[2] == {"role": "tool", "content": "{}", "tool_name": "lookup"}
@@ -47,9 +49,11 @@ def test_ollama_chat_response_with_tool_call(httpx_mock: HTTPXMock) -> None:
             "message": {
                 "role": "assistant",
                 "content": "",
-                "tool_calls": [{
-                    "function": {"name": "lookup", "arguments": {"indicator": "1.2.3.4"}},
-                }],
+                "tool_calls": [
+                    {
+                        "function": {"name": "lookup", "arguments": {"indicator": "1.2.3.4"}},
+                    }
+                ],
             },
             "prompt_eval_count": 12,
             "eval_count": 5,
@@ -61,11 +65,13 @@ def test_ollama_chat_response_with_tool_call(httpx_mock: HTTPXMock) -> None:
         max_tokens=100,
         system="Use tools.",
         messages=[{"role": "user", "content": "Check 1.2.3.4"}],
-        tools=[{
-            "name": "lookup",
-            "description": "Look up an IOC",
-            "input_schema": {"type": "object", "properties": {}},
-        }],
+        tools=[
+            {
+                "name": "lookup",
+                "description": "Look up an IOC",
+                "input_schema": {"type": "object", "properties": {}},
+            }
+        ],
     )
 
     assert response.stop_reason == "tool_use"
@@ -77,16 +83,22 @@ def test_ollama_chat_response_with_tool_call(httpx_mock: HTTPXMock) -> None:
 # AnthropicClient
 # ---------------------------------------------------------------------------
 
-def _mock_anthropic(text: str | None = None, tool_calls: list | None = None,
-                    stop_reason: str = "end_turn",
-                    input_tokens: int = 10, output_tokens: int = 20) -> AnthropicClient:
+
+def _mock_anthropic(
+    text: str | None = None,
+    tool_calls: list | None = None,
+    stop_reason: str = "end_turn",
+    input_tokens: int = 10,
+    output_tokens: int = 20,
+) -> AnthropicClient:
     """Build an AnthropicClient whose SDK client is fully mocked."""
     blocks: list[SimpleNamespace] = []
     if text is not None:
         blocks.append(SimpleNamespace(type="text", text=text))
-    for call in (tool_calls or []):
-        blocks.append(SimpleNamespace(type="tool_use", id=call["id"],
-                                      name=call["name"], input=call["input"]))
+    for call in tool_calls or []:
+        blocks.append(
+            SimpleNamespace(type="tool_use", id=call["id"], name=call["name"], input=call["input"])
+        )
 
     fake_response = SimpleNamespace(
         content=blocks,
@@ -127,8 +139,13 @@ def test_anthropic_tool_use_response() -> None:
         max_tokens=1024,
         system="Use tools.",
         messages=[{"role": "user", "content": "Look up Log4Shell."}],
-        tools=[{"name": "nvd_cve_lookup", "description": "NVD lookup",
-                "input_schema": {"type": "object", "properties": {}}}],
+        tools=[
+            {
+                "name": "nvd_cve_lookup",
+                "description": "NVD lookup",
+                "input_schema": {"type": "object", "properties": {}},
+            }
+        ],
     )
     assert response.stop_reason == "tool_use"
     assert response.content[0].name == "nvd_cve_lookup"

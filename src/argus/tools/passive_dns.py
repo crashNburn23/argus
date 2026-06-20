@@ -1,10 +1,9 @@
 """Passive DNS tool — historical DNS resolutions via VirusTotal."""
+
 from __future__ import annotations
 
 import json
 from typing import Any
-
-import httpx
 
 from argus.config.settings import get_settings
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter

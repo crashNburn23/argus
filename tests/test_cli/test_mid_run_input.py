@@ -1,4 +1,5 @@
 """Tests for mid-run input classification and background task helpers."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -18,6 +19,7 @@ def _done_task(result: str) -> MagicMock:
 
 def _cancelled_task() -> MagicMock:
     import asyncio
+
     t = MagicMock()
     t.done.return_value = True
     t.result.side_effect = asyncio.CancelledError()
@@ -41,6 +43,7 @@ def _running_task() -> MagicMock:
 # _classify_mid_run_input — heuristic path (no LLM call needed)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_classify_extend_starters() -> None:
     for prefix in ("also check", "and look at", "what about the subnet", "additionally pivot"):
@@ -59,6 +62,7 @@ async def test_classify_long_unrelated_falls_back_without_credentials(monkeypatc
     # LLM call will fail (no API key in test env) → should default to "background".
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
     from argus.config.settings import get_settings
+
     get_settings.cache_clear()
     result = await _classify_mid_run_input(
         "Research the Lazarus Group campaign in Southeast Asia",
@@ -71,6 +75,7 @@ async def test_classify_long_unrelated_falls_back_without_credentials(monkeypatc
 # ---------------------------------------------------------------------------
 # _drain_completed — result display and session state update
 # ---------------------------------------------------------------------------
+
 
 def test_drain_completed_removes_finished_task(monkeypatch) -> None:
     printed: list[str] = []

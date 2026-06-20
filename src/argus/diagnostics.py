@@ -1,4 +1,5 @@
 """Configuration and readiness diagnostics for Argus."""
+
 from __future__ import annotations
 
 import os
@@ -151,10 +152,7 @@ def _source_checks(settings: Settings) -> list[DiagnosticCheck]:
     elif settings.siem_type == "splunk":
         has_url = bool(settings.siem_url)
         has_token = bool(settings.siem_api_key and settings.siem_api_key.get_secret_value())
-        has_basic = bool(
-            settings.splunk_username
-            and settings.splunk_password.get_secret_value()
-        )
+        has_basic = bool(settings.splunk_username and settings.splunk_password.get_secret_value())
         if not has_url:
             status, detail = "misconfigured", "SIEM_URL is required for Splunk mode"
         elif not (has_token or has_basic):
@@ -205,4 +203,3 @@ def run_diagnostics(check_connectivity: bool = True) -> DiagnosticResult:
         *_source_checks(settings),
     ]
     return DiagnosticResult(checks=checks)
-

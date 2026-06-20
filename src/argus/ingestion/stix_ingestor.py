@@ -4,6 +4,7 @@ Accepts a parsed STIX bundle dict and returns structured case data without
 making any external API calls.  Intended to run inside `case extract` when
 the artifact content is detected as a STIX bundle.
 """
+
 from __future__ import annotations
 
 import re
@@ -66,10 +67,12 @@ def _mitre_ttps_from_refs(refs: list[dict[str, Any]]) -> list[Observable]:
         if ref.get("source_name") == "mitre-attack":
             eid = ref.get("external_id", "")
             if re.match(r"T\d{4}(\.\d{3})?", eid, re.IGNORECASE):
-                out.append(Observable(
-                    value=eid.upper(),
-                    observable_type=ObservableType.ATTACK_TTP,
-                ))
+                out.append(
+                    Observable(
+                        value=eid.upper(),
+                        observable_type=ObservableType.ATTACK_TTP,
+                    )
+                )
     return out
 
 
@@ -213,9 +216,7 @@ def ingest_stix_bundle(bundle: dict[str, Any]) -> StixIngestResult:
             parts = [f"ATT&CK technique: {name}"]
             if refs:
                 eids = [
-                    r.get("external_id", "")
-                    for r in refs
-                    if r.get("source_name") == "mitre-attack"
+                    r.get("external_id", "") for r in refs if r.get("source_name") == "mitre-attack"
                 ]
                 if eids:
                     parts.append(f"technique ID(s): {', '.join(eids)}")
@@ -309,6 +310,7 @@ def is_stix_bundle(text: str) -> bool:
         return False
     try:
         import json
+
         data = json.loads(text)
         return isinstance(data, dict) and data.get("type") == "bundle"
     except (ValueError, TypeError):

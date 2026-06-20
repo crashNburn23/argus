@@ -1,4 +1,5 @@
 """Typed agent error contract — distinguishes failure modes from empty results."""
+
 from __future__ import annotations
 
 from enum import StrEnum

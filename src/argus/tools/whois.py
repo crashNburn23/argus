@@ -1,10 +1,10 @@
 """WHOIS tool — registration data via RDAP (free, no key) + VirusTotal historical WHOIS."""
+
 from __future__ import annotations
 
 import json
 from typing import Any
 
-import httpx
 import tldextract
 
 from argus.config.settings import get_settings
@@ -69,8 +69,7 @@ async def _rdap(domain: str) -> dict[str, Any]:
             registrant_email = email
 
     events: dict[str, str] = {
-        e.get("eventAction", ""): e.get("eventDate", "")
-        for e in data.get("events", [])
+        e.get("eventAction", ""): e.get("eventDate", "") for e in data.get("events", [])
     }
     nameservers = [ns.get("ldhName", "").lower() for ns in data.get("nameservers", [])]
 
@@ -103,15 +102,17 @@ async def _vt_historical_whois(domain: str, api_key: str) -> list[dict[str, Any]
     records = []
     for item in data.get("data", [])[:5]:
         attrs = item.get("attributes", {})
-        records.append({
-            "date": attrs.get("date", ""),
-            "registrar": attrs.get("registrar", ""),
-            "registrant_email": attrs.get("registrant_email", ""),
-            "registrant_org": attrs.get("registrant_organization", ""),
-            "creation_date": attrs.get("creation_date", ""),
-            "expiry_date": attrs.get("expiry_date", ""),
-            "nameservers": attrs.get("name_servers", []),
-        })
+        records.append(
+            {
+                "date": attrs.get("date", ""),
+                "registrar": attrs.get("registrar", ""),
+                "registrant_email": attrs.get("registrant_email", ""),
+                "registrant_org": attrs.get("registrant_organization", ""),
+                "creation_date": attrs.get("creation_date", ""),
+                "expiry_date": attrs.get("expiry_date", ""),
+                "nameservers": attrs.get("name_servers", []),
+            }
+        )
     return records
 
 

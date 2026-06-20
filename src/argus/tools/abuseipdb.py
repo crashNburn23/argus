@@ -1,4 +1,5 @@
 """AbuseIPDB tool — requires ABUSEIPDB_API_KEY."""
+
 from __future__ import annotations
 
 import json

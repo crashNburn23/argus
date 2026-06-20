@@ -1,4 +1,5 @@
 """Small provider boundary for Anthropic and local Ollama models."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -106,11 +107,13 @@ class OllamaClient:
             content.append(TextBlock(text=message["content"]))
         for call in message.get("tool_calls", []):
             function = call.get("function", {})
-            content.append(ToolUseBlock(
-                id=call.get("id") or f"tool_{uuid4().hex}",
-                name=function.get("name", ""),
-                input=function.get("arguments") or {},
-            ))
+            content.append(
+                ToolUseBlock(
+                    id=call.get("id") or f"tool_{uuid4().hex}",
+                    name=function.get("name", ""),
+                    input=function.get("arguments") or {},
+                )
+            )
 
         return LLMResponse(
             content=content,
@@ -152,22 +155,26 @@ class OllamaClient:
                 for block in content:
                     if getattr(block, "type", "") == "tool_use":
                         tool_names[block.id] = block.name
-                        calls.append({
-                            "id": block.id,
-                            "type": "function",
-                            "function": {"name": block.name, "arguments": block.input},
-                        })
+                        calls.append(
+                            {
+                                "id": block.id,
+                                "type": "function",
+                                "function": {"name": block.name, "arguments": block.input},
+                            }
+                        )
                 if calls:
                     assistant["tool_calls"] = calls
                 converted.append(assistant)
                 continue
 
             for result in content:
-                converted.append({
-                    "role": "tool",
-                    "content": result["content"],
-                    "tool_name": tool_names.get(result["tool_use_id"], ""),
-                })
+                converted.append(
+                    {
+                        "role": "tool",
+                        "content": result["content"],
+                        "tool_name": tool_names.get(result["tool_use_id"], ""),
+                    }
+                )
         return converted
 
 

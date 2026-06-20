@@ -1,4 +1,5 @@
 """Recorded Future tool — requires RECORDED_FUTURE_API_KEY."""
+
 from __future__ import annotations
 
 import json
@@ -45,8 +46,14 @@ def get_tool_definition() -> dict[str, Any]:
                 "entity_type": {
                     "type": "string",
                     "enum": [
-                        "ip", "domain", "url", "md5", "sha256",
-                        "actor", "malware", "vulnerability",
+                        "ip",
+                        "domain",
+                        "url",
+                        "md5",
+                        "sha256",
+                        "actor",
+                        "malware",
+                        "vulnerability",
                     ],
                     "description": "Type of entity",
                 },
@@ -71,9 +78,7 @@ async def _fetch(entity: str, rf_type: str) -> dict[str, Any]:
         "Content-Type": "application/json",
     }
     params = {"fields": "risk,intelCard,relatedEntities,threatLists,metrics"}
-    resp = await get_client().get(
-        f"{_BASE}/{rf_type}/{entity}", headers=headers, params=params
-    )
+    resp = await get_client().get(f"{_BASE}/{rf_type}/{entity}", headers=headers, params=params)
     resp.raise_for_status()
     return dict(resp.json())
 

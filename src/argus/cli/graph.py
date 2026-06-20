@@ -1,9 +1,10 @@
 """IOC and relationship graph rendering — Rich Tree display and JSON export."""
+
 from __future__ import annotations
 
 import json
 import re
-from collections import defaultdict, deque
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Core graph model
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class GraphNode:
@@ -74,14 +76,17 @@ class Graph:
 # Graph builders
 # ---------------------------------------------------------------------------
 
-def build_case_graph(case: "Case") -> Graph:
+
+def build_case_graph(case: Case) -> Graph:
     g = Graph()
     for obs in case.observables:
-        g.add_node(GraphNode(
-            id=obs.observable_id,
-            label=obs.value[:60],
-            node_type=obs.observable_type.value,
-        ))
+        g.add_node(
+            GraphNode(
+                id=obs.observable_id,
+                label=obs.value[:60],
+                node_type=obs.observable_type.value,
+            )
+        )
     for rel in case.relationships:
         g.add_edge(
             rel.source_ref,
@@ -91,7 +96,7 @@ def build_case_graph(case: "Case") -> Graph:
     return g
 
 
-def build_ioc_graph(record: "IOCEnrichmentRecord") -> Graph:
+def build_ioc_graph(record: IOCEnrichmentRecord) -> Graph:
     g = Graph()
     root_id = record.indicator
     g.add_node(GraphNode(id=root_id, label=root_id, node_type=str(record.ioc_type)))
@@ -105,9 +110,7 @@ def build_ioc_graph(record: "IOCEnrichmentRecord") -> Graph:
             g.add_edge(root_id, hostname, "resolves_to")
 
     for cert in record.ssl_certs[:5]:
-        cert_id = str(
-            cert.get("thumbprint") or cert.get("id") or cert.get("serial") or ""
-        )[:16]
+        cert_id = str(cert.get("thumbprint") or cert.get("id") or cert.get("serial") or "")[:16]
         if not cert_id:
             continue
         cn = str(cert.get("subject") or cert.get("cn") or cert.get("name") or cert_id)[:40]
@@ -123,7 +126,9 @@ def build_ioc_graph(record: "IOCEnrichmentRecord") -> Graph:
     for infra in record.related_infrastructure[:8]:
         infra = str(infra).strip()
         if infra and infra != root_id:
-            g.add_node(GraphNode(id=infra, label=infra, node_type="ip" if _is_ip(infra) else "domain"))
+            g.add_node(
+                GraphNode(id=infra, label=infra, node_type="ip" if _is_ip(infra) else "domain")
+            )
             g.add_edge(root_id, infra, "related_to")
 
     for actor in record.threat_actors[:4]:
@@ -139,7 +144,7 @@ def build_ioc_graph(record: "IOCEnrichmentRecord") -> Graph:
     return g
 
 
-def build_actor_graph(actor: "ThreatActor") -> Graph:
+def build_actor_graph(actor: ThreatActor) -> Graph:
     g = Graph()
     actor_id = f"actor:{actor.name}"
     g.add_node(GraphNode(id=actor_id, label=actor.name, node_type="actor"))
@@ -168,20 +173,20 @@ def build_actor_graph(actor: "ThreatActor") -> Graph:
 # ---------------------------------------------------------------------------
 
 _TYPE_STYLE: dict[str, str] = {
-    "ip":         "[cp.red]IP[/cp.red]",
-    "domain":     "[cp.cyan]DOM[/cp.cyan]",
-    "url":        "[cp.dim]URL[/cp.dim]",
-    "md5":        "[cp.amber]MD5[/cp.amber]",
-    "sha1":       "[cp.amber]SHA1[/cp.amber]",
-    "sha256":     "[cp.amber]SHA[/cp.amber]",
-    "email":      "[cp.magenta]EMAIL[/cp.magenta]",
-    "actor":      "[cp.red bold]ACTOR[/cp.red bold]",
-    "malware":    "[cp.amber bold]MAL[/cp.amber bold]",
-    "ttp":        "[cp.purple]TTP[/cp.purple]",
+    "ip": "[cp.red]IP[/cp.red]",
+    "domain": "[cp.cyan]DOM[/cp.cyan]",
+    "url": "[cp.dim]URL[/cp.dim]",
+    "md5": "[cp.amber]MD5[/cp.amber]",
+    "sha1": "[cp.amber]SHA1[/cp.amber]",
+    "sha256": "[cp.amber]SHA[/cp.amber]",
+    "email": "[cp.magenta]EMAIL[/cp.magenta]",
+    "actor": "[cp.red bold]ACTOR[/cp.red bold]",
+    "malware": "[cp.amber bold]MAL[/cp.amber bold]",
+    "ttp": "[cp.purple]TTP[/cp.purple]",
     "attack_ttp": "[cp.purple]TTP[/cp.purple]",
-    "ssl_cert":   "[cp.dim]CERT[/cp.dim]",
-    "campaign":   "[cp.green]CAMP[/cp.green]",
-    "cve":        "[cp.red]CVE[/cp.red]",
+    "ssl_cert": "[cp.dim]CERT[/cp.dim]",
+    "campaign": "[cp.green]CAMP[/cp.green]",
+    "cve": "[cp.red]CVE[/cp.red]",
 }
 
 
@@ -248,14 +253,14 @@ def export_json(graph: Graph) -> str:
     )
 
 
-def render_ioc_graph(record: "IOCEnrichmentRecord") -> None:
+def render_ioc_graph(record: IOCEnrichmentRecord) -> None:
     g = build_ioc_graph(record)
     if len(g.edges) == 0:
         return
     render_tree(g, root_id=record.indicator, title=f"Pivot: {record.indicator}")
 
 
-def render_actor_graph(actor: "ThreatActor") -> None:
+def render_actor_graph(actor: ThreatActor) -> None:
     g = build_actor_graph(actor)
     if len(g.edges) == 0:
         return
@@ -265,6 +270,7 @@ def render_actor_graph(actor: "ThreatActor") -> None:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _is_ip(s: str) -> bool:
     return bool(re.match(r"^\d{1,3}(\.\d{1,3}){3}$", s))

@@ -1,4 +1,5 @@
 """Integration tests for URLhaus tool."""
+
 from __future__ import annotations
 
 import json

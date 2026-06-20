@@ -1,4 +1,5 @@
 """Structured logging setup — call configure_logging() at app startup."""
+
 from __future__ import annotations
 
 import logging

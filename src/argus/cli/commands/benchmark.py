@@ -1,4 +1,5 @@
 """argus benchmark - built-in incident report benchmark commands."""
+
 from __future__ import annotations
 
 import asyncio
@@ -123,11 +124,13 @@ def run_live_cases(
                     save=False,
                 )
                 path = save_report(report, output_dir, case.case_id)
-                completed.append({
-                    "evaluation": evaluate_report(case, report),
-                    "duration_seconds": time.monotonic() - start,
-                    "report_path": str(path),
-                })
+                completed.append(
+                    {
+                        "evaluation": evaluate_report(case, report),
+                        "duration_seconds": time.monotonic() - start,
+                        "report_path": str(path),
+                    }
+                )
         return completed
 
     try:
@@ -147,8 +150,7 @@ def run_live_cases(
                     {
                         "baseline_score": baseline_by_case.get(item["evaluation"].case_id),
                         "score_delta": (
-                            item["evaluation"].score
-                            - baseline_by_case[item["evaluation"].case_id]
+                            item["evaluation"].score - baseline_by_case[item["evaluation"].case_id]
                         )
                         if item["evaluation"].case_id in baseline_by_case
                         else None,

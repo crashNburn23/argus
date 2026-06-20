@@ -67,7 +67,9 @@ class ThreatActor(BaseModel):
     last_seen: datetime | None = None
     source_urls: list[str] = []
 
-    @field_validator("description", "sophistication", "resource_level", "primary_motivation", mode="before")
+    @field_validator(
+        "description", "sophistication", "resource_level", "primary_motivation", mode="before"
+    )
     @classmethod
     def _coerce_none_str(cls, v: Any) -> str:
         return "" if v is None else str(v)

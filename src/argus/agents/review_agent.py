@@ -1,4 +1,5 @@
 """ReviewAgent — checks every claim in a draft report against stored case evidence."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -79,9 +80,7 @@ def _build_review_prompt(report_content: str, case: Case) -> str:
         for ev in confirmed:
             src = ev.source_name or ev.source_type
             status_tag = f"[{ev.status.value}] " if ev.status != EvidenceStatus.CONFIRMED else ""
-            lines.append(
-                f"- [{ev.evidence_id}] {status_tag}_{src}_: {ev.summary}"
-            )
+            lines.append(f"- [{ev.evidence_id}] {status_tag}_{src}_: {ev.summary}")
     else:
         lines.append("(no evidence available)")
 

@@ -1,4 +1,5 @@
 """argus case - CTI case workspace commands."""
+
 from __future__ import annotations
 
 import asyncio
@@ -640,9 +641,7 @@ def enrich_case_observables(
         f"to [cp.cyan]{case_id}[/cp.cyan]"
     )
     if failed:
-        console.print(
-            f"[cp.amber]⚠ {len(failed)} collection failure(s):[/cp.amber]"
-        )
+        console.print(f"[cp.amber]⚠ {len(failed)} collection failure(s):[/cp.amber]")
         for ev in failed:
             src = ev.source_name or ev.source_type
             obs_id = ev.observable_ids[0] if ev.observable_ids else "unknown"
@@ -680,6 +679,7 @@ async def _run_enrichment(
                 and ("abuseipdb", oid) not in existing_enrichments
             ):
                 from argus.tools.abuseipdb import abuseipdb_check
+
                 all_tasks.append((obs, "abuseipdb", abuseipdb_check(value)))
             if (
                 shodan_key
@@ -687,6 +687,7 @@ async def _run_enrichment(
                 and ("shodan", oid) not in existing_enrichments
             ):
                 from argus.tools.shodan import shodan_lookup
+
                 all_tasks.append((obs, "shodan", shodan_lookup(ip=value)))
             if (
                 otx_key
@@ -694,6 +695,7 @@ async def _run_enrichment(
                 and ("otx", oid) not in existing_enrichments
             ):
                 from argus.tools.alienvault_otx import otx_lookup
+
                 all_tasks.append((obs, "otx", otx_lookup(value, "ip")))
         elif obs_type == ObservableType.DOMAIN:
             if (
@@ -702,6 +704,7 @@ async def _run_enrichment(
                 and ("virustotal", oid) not in existing_enrichments
             ):
                 from argus.tools.virustotal import virustotal_lookup
+
                 all_tasks.append((obs, "virustotal", virustotal_lookup(value, "domain")))
             if (
                 otx_key
@@ -709,6 +712,7 @@ async def _run_enrichment(
                 and ("otx", oid) not in existing_enrichments
             ):
                 from argus.tools.alienvault_otx import otx_lookup
+
                 all_tasks.append((obs, "otx", otx_lookup(value, "domain")))
         elif obs_type == ObservableType.URL:
             if (
@@ -717,6 +721,7 @@ async def _run_enrichment(
                 and ("virustotal", oid) not in existing_enrichments
             ):
                 from argus.tools.virustotal import virustotal_lookup
+
                 all_tasks.append((obs, "virustotal", virustotal_lookup(value, "url")))
             if (
                 otx_key
@@ -724,6 +729,7 @@ async def _run_enrichment(
                 and ("otx", oid) not in existing_enrichments
             ):
                 from argus.tools.alienvault_otx import otx_lookup
+
                 all_tasks.append((obs, "otx", otx_lookup(value, "url")))
         elif obs_type in {ObservableType.MD5, ObservableType.SHA1, ObservableType.SHA256}:
             if (
@@ -732,6 +738,7 @@ async def _run_enrichment(
                 and ("virustotal", oid) not in existing_enrichments
             ):
                 from argus.tools.virustotal import virustotal_lookup
+
                 all_tasks.append((obs, "virustotal", virustotal_lookup(value, obs_type.value)))
             if (
                 otx_key
@@ -739,13 +746,12 @@ async def _run_enrichment(
                 and ("otx", oid) not in existing_enrichments
             ):
                 from argus.tools.alienvault_otx import otx_lookup
+
                 all_tasks.append((obs, "otx", otx_lookup(value, "file")))
         elif obs_type == ObservableType.CVE:
-            if (
-                _source_allowed("nvd", allowed_sources)
-                and ("nvd", oid) not in existing_enrichments
-            ):
+            if _source_allowed("nvd", allowed_sources) and ("nvd", oid) not in existing_enrichments:
                 from argus.tools.nvd import nvd_cve_lookup
+
                 all_tasks.append((obs, "nvd", nvd_cve_lookup(cve_id=value.upper())))
 
     if not all_tasks:
@@ -809,9 +815,7 @@ def _parse_enrichment_evidence(obs: Observable, source: str, raw_json: str) -> E
     )
 
 
-def _summarize_enrichment(
-    source: str, data: dict[str, Any], obs: Observable
-) -> tuple[str, float]:
+def _summarize_enrichment(source: str, data: dict[str, Any], obs: Observable) -> tuple[str, float]:
     value = obs.canonical_value or obs.value
 
     if "error" in data:
@@ -968,8 +972,7 @@ def pivot_case_observables(
         if ev.metadata.get("pivot_source") and ev.status != EvidenceStatus.FAILED
     }
     existing_index: dict[tuple[ObservableType, str], Observable] = {
-        (o.observable_type, o.canonical_value or o.value): o
-        for o in case.observables
+        (o.observable_type, o.canonical_value or o.value): o for o in case.observables
     }
 
     new_obs, new_evidence, new_rels = asyncio.run(
@@ -1031,9 +1034,7 @@ def pivot_case_observables(
         f"added to [cp.cyan]{case_id}[/cp.cyan]"
     )
     if failed_ev:
-        console.print(
-            f"[cp.amber]⚠ {len(failed_ev)} collection failure(s):[/cp.amber]"
-        )
+        console.print(f"[cp.amber]⚠ {len(failed_ev)} collection failure(s):[/cp.amber]")
         for ev in failed_ev:
             src = ev.source_name or ev.source_type
             obs_id = ev.observable_ids[0] if ev.observable_ids else "unknown"
@@ -1068,6 +1069,7 @@ async def _run_pivots(
             and ("passive_dns", oid) not in existing_pivots
         ):
             from argus.tools.passive_dns import passive_dns_lookup
+
             all_tasks.append((obs, "passive_dns", passive_dns_lookup(value, itype)))
 
         if obs_type == ObservableType.DOMAIN:
@@ -1076,12 +1078,14 @@ async def _run_pivots(
                 and ("ssl_cert", oid) not in existing_pivots
             ):
                 from argus.tools.certs import ssl_cert_lookup
+
                 all_tasks.append((obs, "ssl_cert", ssl_cert_lookup(value, "domain")))
             if (
                 _pivot_source_allowed("whois", allowed_sources)
                 and ("whois", oid) not in existing_pivots
             ):
                 from argus.tools.whois import whois_lookup
+
                 all_tasks.append((obs, "whois", whois_lookup(value)))
 
     if not all_tasks:
@@ -1098,9 +1102,7 @@ async def _run_pivots(
         if isinstance(result, Exception):
             new_evidence.append(_pivot_error_evidence(obs, source, str(result)))
         else:
-            disc_obs, ev_items, rels = _parse_pivot_result(
-                obs, source, str(result), existing_index
-            )
+            disc_obs, ev_items, rels = _parse_pivot_result(obs, source, str(result), existing_index)
             new_observables.extend(disc_obs)
             new_evidence.extend(ev_items)
             new_relationships.extend(rels)
@@ -1345,6 +1347,7 @@ def generate_case_report(
     )
 
     if save:
+
         def mutate(c: Case) -> Case:
             return c.model_copy(update={"reports": [*c.reports, report_artifact]})
 
@@ -1359,12 +1362,11 @@ def generate_case_report(
         return
 
     from argus.cli.output import render_markdown
+
     render_markdown(content)
 
 
-def _render_case_report(
-    case: Case, report_type: str, title: str, classification: str
-) -> str:
+def _render_case_report(case: Case, report_type: str, title: str, classification: str) -> str:
     now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     lines: list[str] = []
 
@@ -1406,9 +1408,7 @@ def _render_case_report(
     if case.evidence:
         lines.append(f"## Evidence ({len(case.evidence)} items)\n")
         lines.append(
-            f"- Confirmed: {len(confirmed)}  "
-            f"Inferred: {len(inferred)}  "
-            f"Failed: {len(failed)}\n"
+            f"- Confirmed: {len(confirmed)}  Inferred: {len(inferred)}  Failed: {len(failed)}\n"
         )
         for ev in case.evidence:
             if ev.status == EvidenceStatus.FAILED:
@@ -1417,8 +1417,7 @@ def _render_case_report(
             status_label = f"[{ev.status.value}]" if ev.status != EvidenceStatus.CONFIRMED else ""
             conf_label = f" ({ev.confidence:.0%})" if ev.confidence else ""
             lines.append(
-                f"- **[{ev.evidence_id}]** {status_label} "
-                f"_{source}_{conf_label}: {ev.summary}"
+                f"- **[{ev.evidence_id}]** {status_label} _{source}_{conf_label}: {ev.summary}"
             )
         if failed:
             lines.append(f"\n### Collection Failures ({len(failed)})\n")
@@ -1513,50 +1512,64 @@ def show_case_timeline(
 
     events: list[dict[str, Any]] = []
 
-    events.append({
-        "ts": case.created_at.isoformat(),
-        "type": "case_opened",
-        "summary": f"Case opened: {case.title}",
-    })
+    events.append(
+        {
+            "ts": case.created_at.isoformat(),
+            "type": "case_opened",
+            "summary": f"Case opened: {case.title}",
+        }
+    )
     for artifact in case.artifacts:
         art_label = artifact.title or artifact.artifact_id
-        events.append({
-            "ts": artifact.received_at.isoformat(),
-            "type": "artifact",
-            "summary": f"Artifact added: {art_label} ({artifact.artifact_type.value})",
-        })
+        events.append(
+            {
+                "ts": artifact.received_at.isoformat(),
+                "type": "artifact",
+                "summary": f"Artifact added: {art_label} ({artifact.artifact_type.value})",
+            }
+        )
     for evidence in case.evidence:
         ev_src = evidence.source_name or evidence.source_type
-        events.append({
-            "ts": evidence.collected_at.isoformat(),
-            "type": f"evidence_{evidence.status.value}",
-            "summary": f"[{evidence.status.value}] {ev_src}: {evidence.summary}",
-            "evidence_id": evidence.evidence_id,
-        })
+        events.append(
+            {
+                "ts": evidence.collected_at.isoformat(),
+                "type": f"evidence_{evidence.status.value}",
+                "summary": f"[{evidence.status.value}] {ev_src}: {evidence.summary}",
+                "evidence_id": evidence.evidence_id,
+            }
+        )
     for note in case.notes:
-        events.append({
-            "ts": note.created_at.isoformat(),
-            "type": "note",
-            "summary": f"Note ({note.author}): {note.body[:80]}",
-        })
+        events.append(
+            {
+                "ts": note.created_at.isoformat(),
+                "type": "note",
+                "summary": f"Note ({note.author}): {note.body[:80]}",
+            }
+        )
     for pir in case.pirs:
-        events.append({
-            "ts": pir.created_at.isoformat(),
-            "type": "pir_added",
-            "summary": f"PIR added: {pir.question[:80]}",
-        })
+        events.append(
+            {
+                "ts": pir.created_at.isoformat(),
+                "type": "pir_added",
+                "summary": f"PIR added: {pir.question[:80]}",
+            }
+        )
         if pir.answered_at:
-            events.append({
-                "ts": pir.answered_at.isoformat(),
-                "type": "pir_answered",
-                "summary": f"PIR answered: {pir.question[:60]}",
-            })
+            events.append(
+                {
+                    "ts": pir.answered_at.isoformat(),
+                    "type": "pir_answered",
+                    "summary": f"PIR answered: {pir.question[:60]}",
+                }
+            )
     for report in case.reports:
-        events.append({
-            "ts": report.generated_at.isoformat(),
-            "type": "report",
-            "summary": f"Report generated: {report.title} ({report.report_type})",
-        })
+        events.append(
+            {
+                "ts": report.generated_at.isoformat(),
+                "type": "report",
+                "summary": f"Report generated: {report.title} ({report.report_type})",
+            }
+        )
 
     events.sort(key=lambda e: e["ts"])
 
@@ -1639,17 +1652,17 @@ def analyze_case(
             content = asyncio.run(agent.generate(case))
     except Exception as exc:
         from argus.cli.output import print_agent_error
+
         print_agent_error(exc)
         raise typer.Exit(1)
 
     review_metadata: dict[str, Any] = {}
     if review:
         from argus.agents.review_agent import ReviewAgent
+
         try:
             with thinking("reviewing report grounding"):
-                review_result = asyncio.run(
-                    ReviewAgent(progress=status).review(content, case)
-                )
+                review_result = asyncio.run(ReviewAgent(progress=status).review(content, case))
             review_metadata = {
                 "review_passed": review_result.passed,
                 "grounded_claim_count": review_result.grounded_claim_count,
@@ -1680,12 +1693,12 @@ def analyze_case(
                 for finding in review_result.findings:
                     sev_color = "cp.red" if finding.severity == "error" else "cp.amber"
                     console.print(
-                        f"  [{sev_color}]{finding.severity}[/{sev_color}]"
-                        f" {finding.claim[:80]}"
+                        f"  [{sev_color}]{finding.severity}[/{sev_color}] {finding.claim[:80]}"
                     )
                     console.print(f"    {finding.issue}")
         except Exception as exc:
             from argus.cli.output import print_agent_error
+
             print_agent_error(exc)
 
     report_artifact = ReportArtifact(
@@ -1698,6 +1711,7 @@ def analyze_case(
     )
 
     if save:
+
         def mutate(c: Case) -> Case:
             return c.model_copy(update={"reports": [*c.reports, report_artifact]})
 

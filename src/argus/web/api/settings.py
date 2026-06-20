@@ -1,4 +1,5 @@
 """Settings, tools, and agents REST API."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -72,7 +73,9 @@ def _ollama_models(base_url: str) -> list[str]:
     try:
         response = httpx.get(f"{base_url.rstrip('/')}/api/tags", timeout=2.0)
         response.raise_for_status()
-        return sorted(item["name"] for item in response.json().get("models", []) if item.get("name"))
+        return sorted(
+            item["name"] for item in response.json().get("models", []) if item.get("name")
+        )
     except Exception:
         return []
 
@@ -189,11 +192,13 @@ async def get_tools() -> list[dict[str, Any]]:
 async def get_agents() -> list[dict[str, Any]]:
     result = []
     for name, tools in _AGENT_TOOLS.items():
-        result.append({
-            "name": name,
-            "description": _AGENT_DESCRIPTIONS.get(name, ""),
-            "tools": tools,
-        })
+        result.append(
+            {
+                "name": name,
+                "description": _AGENT_DESCRIPTIONS.get(name, ""),
+                "tools": tools,
+            }
+        )
     return result
 
 
@@ -208,13 +213,15 @@ async def list_tool_files() -> list[dict[str, Any]]:
         tool_names = _MODULE_TO_TOOLS.get(f.stem, [])
         statuses = [status_map[n] for n in tool_names if n in status_map]
         available: bool | None = any(s["available"] for s in statuses) if statuses else None
-        result.append({
-            "filename": f.name,
-            "stem": f.stem,
-            "tool_names": tool_names,
-            "available": available,
-            "size": f.stat().st_size,
-        })
+        result.append(
+            {
+                "filename": f.name,
+                "stem": f.stem,
+                "tool_names": tool_names,
+                "available": available,
+                "size": f.stat().st_size,
+            }
+        )
     return result
 
 

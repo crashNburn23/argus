@@ -1,4 +1,5 @@
 """MISP tool — optional, skipped if MISP_URL is unset."""
+
 from __future__ import annotations
 
 import json

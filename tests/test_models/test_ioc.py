@@ -1,4 +1,5 @@
 """Unit tests for IOC models."""
+
 from __future__ import annotations
 
 from argus.models.ioc import (
@@ -35,8 +36,9 @@ def test_ioc_enrichment_result():
 
 
 def test_stix_ip_pattern():
-    record = IOCEnrichmentRecord(indicator="1.2.3.4", ioc_type=IOCType.IP,
-                                  overall_verdict=IOCVerdict.MALICIOUS)
+    record = IOCEnrichmentRecord(
+        indicator="1.2.3.4", ioc_type=IOCType.IP, overall_verdict=IOCVerdict.MALICIOUS
+    )
     stix = ioc_to_stix_indicator(record)
     assert stix["type"] == "indicator"
     assert "[ipv4-addr:value = '1.2.3.4']" in stix["pattern"]
@@ -44,8 +46,9 @@ def test_stix_ip_pattern():
 
 
 def test_stix_domain_pattern():
-    record = IOCEnrichmentRecord(indicator="evil.com", ioc_type=IOCType.DOMAIN,
-                                  overall_verdict=IOCVerdict.SUSPICIOUS)
+    record = IOCEnrichmentRecord(
+        indicator="evil.com", ioc_type=IOCType.DOMAIN, overall_verdict=IOCVerdict.SUSPICIOUS
+    )
     stix = ioc_to_stix_indicator(record)
     assert "[domain-name:value = 'evil.com']" in stix["pattern"]
     assert "anomalous-activity" in stix["indicator_types"]

@@ -2,6 +2,7 @@
 
 Also provides url_fetch for reading a specific page URL and returning clean text.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,10 +16,10 @@ from ddgs import DDGS
 
 from argus.storage.cache import cache_get, cache_set
 
-
 # ---------------------------------------------------------------------------
 # HTML → text stripper
 # ---------------------------------------------------------------------------
+
 
 class _TagStripper(HTMLParser):
     _SKIP_TAGS = {"script", "style", "head", "nav", "noscript", "iframe", "svg", "footer"}
@@ -63,6 +64,7 @@ def _strip_html(raw: str) -> str:
 # url_fetch tool
 # ---------------------------------------------------------------------------
 
+
 def get_url_fetch_tool_definition() -> dict[str, Any]:
     return {
         "name": "url_fetch",
@@ -93,6 +95,7 @@ async def url_fetch(url: str) -> str:
     result: dict[str, Any]
     try:
         import httpx
+
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=10.0),
             follow_redirects=True,
@@ -118,6 +121,7 @@ async def url_fetch(url: str) -> str:
 # ---------------------------------------------------------------------------
 # web_search tool
 # ---------------------------------------------------------------------------
+
 
 def get_tool_definition() -> dict[str, Any]:
     return {
@@ -183,6 +187,7 @@ async def web_search(query: str, num_results: int = 8) -> str:
 def _domain(url: str) -> str:
     try:
         from urllib.parse import urlparse
+
         return urlparse(url).netloc or "unknown"
     except Exception:
         return "unknown"

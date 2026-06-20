@@ -1,4 +1,5 @@
 """argus doctor - configuration and source readiness checks."""
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -12,10 +13,12 @@ from argus.diagnostics import DiagnosticResult, run_diagnostics
 
 def render_diagnostics(result: DiagnosticResult, as_json: bool = False) -> None:
     if as_json:
-        print_json({
-            "ready": result.ready,
-            "checks": [check.model_dump() for check in result.checks],
-        })
+        print_json(
+            {
+                "ready": result.ready,
+                "checks": [check.model_dump() for check in result.checks],
+            }
+        )
         return
 
     table = Table(title="Argus Readiness")

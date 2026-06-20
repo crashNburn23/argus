@@ -1,2 +1,1 @@
 """Argus model package."""
-

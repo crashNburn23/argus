@@ -1,10 +1,9 @@
 """SSL/TLS certificate tool — Certificate Transparency (crt.sh) + VirusTotal."""
+
 from __future__ import annotations
 
 import json
 from typing import Any
-
-import httpx
 
 from argus.config.settings import get_settings
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter
@@ -61,16 +60,18 @@ async def _query_crtsh(domain: str, include_subdomains: bool) -> list[dict[str, 
             continue
         seen.add(serial)
         sans = [s.strip() for s in entry.get("name_value", "").split("\n") if s.strip()]
-        certs.append({
-            "serial_number": serial,
-            "common_name": entry.get("common_name", ""),
-            "sans": sans,
-            "issuer": entry.get("issuer_name", ""),
-            "not_before": entry.get("not_before", ""),
-            "not_after": entry.get("not_after", ""),
-            "logged_at": entry.get("logged_at", ""),
-            "source": "crt.sh",
-        })
+        certs.append(
+            {
+                "serial_number": serial,
+                "common_name": entry.get("common_name", ""),
+                "sans": sans,
+                "issuer": entry.get("issuer_name", ""),
+                "not_before": entry.get("not_before", ""),
+                "not_after": entry.get("not_after", ""),
+                "logged_at": entry.get("logged_at", ""),
+                "source": "crt.sh",
+            }
+        )
     return certs
 
 
@@ -96,18 +97,20 @@ async def _query_vt_certs(
         attrs = item.get("attributes", {})
         raw_sans: list[str] = attrs.get("extensions", {}).get("subject_alternative_name", [])
         sans = [s.replace("DNS:", "").replace("IP:", "").strip() for s in raw_sans]
-        certs.append({
-            "serial_number": attrs.get("serial_number", ""),
-            "thumbprint": attrs.get("thumbprint", ""),
-            "thumbprint_sha256": attrs.get("thumbprint_sha256", ""),
-            "common_name": attrs.get("subject", {}).get("CN", ""),
-            "subject": attrs.get("subject", {}),
-            "issuer": attrs.get("issuer", {}),
-            "not_before": attrs.get("validity", {}).get("not_before", ""),
-            "not_after": attrs.get("validity", {}).get("not_after", ""),
-            "sans": sans,
-            "source": "virustotal",
-        })
+        certs.append(
+            {
+                "serial_number": attrs.get("serial_number", ""),
+                "thumbprint": attrs.get("thumbprint", ""),
+                "thumbprint_sha256": attrs.get("thumbprint_sha256", ""),
+                "common_name": attrs.get("subject", {}).get("CN", ""),
+                "subject": attrs.get("subject", {}),
+                "issuer": attrs.get("issuer", {}),
+                "not_before": attrs.get("validity", {}).get("not_before", ""),
+                "not_after": attrs.get("validity", {}).get("not_after", ""),
+                "sans": sans,
+                "source": "virustotal",
+            }
+        )
     return certs
 
 

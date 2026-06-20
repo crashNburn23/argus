@@ -1,4 +1,5 @@
 """Integration tests for NVD tool using pytest-httpx."""
+
 from __future__ import annotations
 
 import json
@@ -40,9 +41,7 @@ _NVD_SAMPLE = {
     ],
 }
 
-_CISA_KEV_SAMPLE = {
-    "vulnerabilities": [{"cveID": "CVE-2021-44228", "vendorProject": "Apache"}]
-}
+_CISA_KEV_SAMPLE = {"vulnerabilities": [{"cveID": "CVE-2021-44228", "vendorProject": "Apache"}]}
 
 
 @pytest.mark.asyncio
