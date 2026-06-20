@@ -311,7 +311,7 @@ _SLASH_HELP = """
   [cp.cyan]/help[/cp.cyan]                   This message
   [cp.cyan]/exit[/cp.cyan] [cp.dim]or[/cp.dim] [cp.cyan]/quit[/cp.cyan]   Close session
 
-[cp.dim]Anything else → CTI orchestrator (actor research, CVE queries, SIEM triage).[/cp.dim]
+[cp.dim]Anything else → CTI orchestrator (actor research, CVE queries, alert triage).[/cp.dim]
 """
 
 

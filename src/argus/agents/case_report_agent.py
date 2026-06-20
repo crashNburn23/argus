@@ -63,7 +63,7 @@ Audience: SOC and Detection Engineering
 Write a detection-focused product. Include:
 1. Threat Summary (1 paragraph — what to look for and why)
 2. Indicators for Immediate Watchlisting (IPs, domains, hashes — one per line, actionable)
-3. SIEM Detection Guidance (example query logic for each indicator type present)
+3. Detection Guidance (behavioral detection logic for each TTP and indicator type present)
 4. MITRE ATT&CK Coverage (techniques from evidence, mapped to detectable behaviors)
 5. Recommended Alert Tuning (what to enable, what noise to filter)
 6. Escalation Criteria (what SOC analyst should page on)

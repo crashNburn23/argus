@@ -23,7 +23,6 @@ _MODULE_TO_TOOLS: dict[str, list[str]] = {
     "abuseipdb": ["abuseipdb_check"],
     "alienvault_otx": ["otx_lookup"],
     "misp": ["misp_search"],
-    "siem": ["siem_query"],
     "mitre_attack": ["mitre_attack_lookup"],
     "nvd": ["nvd_cve_lookup"],
     "urlhaus": ["urlhaus_lookup"],
@@ -59,7 +58,7 @@ _AGENT_DESCRIPTIONS: dict[str, str] = {
     "threat_actor": "Researches APT groups, campaigns, and MITRE ATT&CK TTPs",
     "vuln": "Looks up CVE details, CVSS scores, and exploitation status from NVD / CISA KEV",
     "triage": "Triages raw security alerts — extracts IOCs and assigns TP/FP/NI verdicts",
-    "report": "Generates SIEM-based incident summary reports",
+    "report": "Generates incident summary reports from stored evidence",
 }
 
 _ANTHROPIC_MODELS = [
@@ -144,8 +143,6 @@ async def get_settings_api() -> dict[str, Any]:
         "ollama_base_url": s.ollama_base_url,
         "ollama_timeout_seconds": s.ollama_timeout_seconds,
         "misp_url": s.misp_url,
-        "siem_type": s.siem_type,
-        "siem_url": s.siem_url,
         "db_path": str(s.db_path),
         "cases_dir": str(s.cases_dir),
         "reports_dir": str(s.reports_dir),

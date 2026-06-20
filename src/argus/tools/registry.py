@@ -16,7 +16,6 @@ from argus.tools import (
     passive_dns,
     recorded_future,
     shodan,
-    siem,
     urlhaus,
     virustotal,
     web_search,
@@ -35,19 +34,6 @@ _AVAILABILITY: dict[str, Callable[..., bool]] = {
     "passive_dns_lookup": lambda s: bool(s.api_key("virustotal")),
     "ssl_cert_lookup": lambda s: True,  # crt.sh is always free
     "whois_lookup": lambda s: True,  # RDAP is always free
-    "siem_query": lambda s: (
-        bool(
-            s.siem_url
-            and (
-                (s.siem_api_key and s.siem_api_key.get_secret_value())
-                or (s.splunk_username and s.splunk_password.get_secret_value())
-            )
-        )
-        if s.siem_type.lower() == "splunk"
-        else bool(s.siem_log_path)
-        if s.siem_type.lower() == "file"
-        else bool(s.siem_url)
-    ),
     # Always available — no key required
     "mitre_attack_lookup": lambda s: True,
     "nvd_cve_lookup": lambda s: True,
@@ -64,7 +50,6 @@ _DEFINITIONS: dict[str, Callable[[], dict[str, Any]]] = {
     "abuseipdb_check": abuseipdb.get_tool_definition,
     "otx_lookup": alienvault_otx.get_tool_definition,
     "misp_search": misp.get_tool_definition,
-    "siem_query": siem.get_tool_definition,
     "mitre_attack_lookup": mitre_attack.get_tool_definition,
     "nvd_cve_lookup": nvd.get_tool_definition,
     "urlhaus_lookup": urlhaus.get_tool_definition,
@@ -90,7 +75,7 @@ _AGENT_TOOLS: dict[str, list[str]] = {
     "threat_actor": ["mitre_attack_lookup", "otx_lookup", "recorded_future_search", "web_search"],
     "vuln": ["nvd_cve_lookup", "shodan_lookup"],
     "triage": ["virustotal_lookup", "abuseipdb_check", "otx_lookup", "mitre_attack_lookup"],
-    "report": ["siem_query"],
+    "report": [],
     "orchestrator": [],  # orchestrator uses agents as tools
     "case_analysis": [
         "virustotal_lookup",
@@ -161,14 +146,6 @@ def tool_status() -> list[dict[str, Any]]:
             # Derive a human-readable reason
             if name == "misp_search":
                 reason = "MISP_URL not configured"
-            elif name == "siem_query":
-                siem_type = settings.siem_type.lower()
-                if siem_type == "splunk":
-                    reason = "SIEM_URL or Splunk credentials not configured"
-                elif siem_type == "file":
-                    reason = "SIEM_LOG_PATH not configured"
-                else:
-                    reason = "SIEM_URL not configured"
             else:
                 reason = "API key not configured"
         result.append({"name": name, "available": available, "reason": reason})
@@ -187,7 +164,6 @@ async def dispatch_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
         passive_dns,
         recorded_future,
         shodan,
-        siem,
         urlhaus,
         virustotal,
         web_search,
@@ -201,7 +177,6 @@ async def dispatch_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
         "abuseipdb_check": abuseipdb.abuseipdb_check,
         "otx_lookup": alienvault_otx.otx_lookup,
         "misp_search": misp.misp_search,
-        "siem_query": siem.siem_query,
         "mitre_attack_lookup": mitre_attack.mitre_attack_lookup,
         "nvd_cve_lookup": nvd.nvd_cve_lookup,
         "urlhaus_lookup": urlhaus.urlhaus_lookup,

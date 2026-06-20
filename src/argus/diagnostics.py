@@ -139,34 +139,6 @@ def _source_checks(settings: Settings) -> list[DiagnosticCheck]:
         DiagnosticCheck(category="source", name="MISP", status=misp_status, detail=misp_detail)
     )
 
-    if settings.siem_type == "file":
-        if settings.siem_log_path:
-            path = Path(settings.siem_log_path)
-            status = "configured" if path.exists() else "misconfigured"
-            detail = f"Log path: {path}" if path.exists() else f"Log path does not exist: {path}"
-        else:
-            status, detail = "misconfigured", "SIEM_LOG_PATH is required for file mode"
-    elif settings.siem_type in {"api", "webhook"}:
-        status = "configured" if settings.siem_url else "misconfigured"
-        detail = f"Endpoint: {settings.siem_url}" if settings.siem_url else "SIEM_URL is required"
-    elif settings.siem_type == "splunk":
-        has_url = bool(settings.siem_url)
-        has_token = bool(settings.siem_api_key and settings.siem_api_key.get_secret_value())
-        has_basic = bool(settings.splunk_username and settings.splunk_password.get_secret_value())
-        if not has_url:
-            status, detail = "misconfigured", "SIEM_URL is required for Splunk mode"
-        elif not (has_token or has_basic):
-            status, detail = (
-                "misconfigured",
-                "Splunk auth not configured — set SIEM_API_KEY or "
-                "SPLUNK_USERNAME + SPLUNK_PASSWORD",
-            )
-        else:
-            auth_method = "token" if has_token else "basic auth"
-            status, detail = "configured", f"Splunk at {settings.siem_url} ({auth_method})"
-    else:
-        status, detail = "misconfigured", f"Unsupported SIEM_TYPE: {settings.siem_type!r}"
-    checks.append(DiagnosticCheck(category="source", name="SIEM", status=status, detail=detail))
     return checks
 
 

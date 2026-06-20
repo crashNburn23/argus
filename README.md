@@ -210,26 +210,13 @@ Orchestrator (interactive / one-shot queries)
     ├── ThreatActorAgent    → MITRE ATT&CK, OTX, Recorded Future, web
     ├── VulnIntelAgent      → NVD, CISA KEV, Shodan
     ├── TriageAgent         → VT, AbuseIPDB, OTX, MITRE ATT&CK
-    ├── CaseAnalysisAgent   → IOC enrichment + mandatory infrastructure pivoting
-    └── siem_query          → Splunk or configured SIEM backend
+    └── CaseAnalysisAgent   → IOC enrichment + mandatory infrastructure pivoting
 ```
 
 Each agent runs its own model tool-use loop, returns a typed Pydantic result, and stores
 a run record. The orchestrator fetches URLs before dispatching sub-agents, then uses
 CaseAnalysisAgent to enrich any IOCs found. A verification pass identifies retriable vs
 permanent gaps before returning.
-
-## Docker (Splunk dev environment)
-
-A `docker-compose.yml` for Splunk with the BOTS v3 dataset is in `docker/splunk/`. Useful
-for testing SIEM queries without a production Splunk instance.
-
-```bash
-cd docker/splunk
-docker compose up -d
-```
-
-Splunk web at http://localhost:8000, HEC at http://localhost:8088.
 
 ## Development
 

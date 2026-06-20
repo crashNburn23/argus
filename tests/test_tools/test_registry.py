@@ -14,12 +14,6 @@ def _settings(**overrides) -> MagicMock:
     s = MagicMock()
     s.api_key = MagicMock(return_value=None)
     s.misp_url = None
-    s.siem_type = "file"
-    s.siem_url = None
-    s.siem_log_path = None
-    s.siem_api_key = None
-    s.splunk_username = ""
-    s.splunk_password = MagicMock(get_secret_value=MagicMock(return_value=""))
     for key, value in overrides.items():
         setattr(s, key, value)
     return s
@@ -96,66 +90,6 @@ def test_misp_unavailable_without_url() -> None:
 
 def test_misp_available_with_url() -> None:
     assert registry._AVAILABILITY["misp_search"](_settings(misp_url="https://misp.local")) is True
-
-
-# ---------------------------------------------------------------------------
-# SIEM — file backend
-# ---------------------------------------------------------------------------
-
-
-def test_siem_file_unavailable_without_log_path() -> None:
-    s = _settings(siem_type="file", siem_log_path=None)
-    assert registry._AVAILABILITY["siem_query"](s) is False
-
-
-def test_siem_file_available_with_log_path() -> None:
-    s = _settings(siem_type="file", siem_log_path="/var/log/siem.json")
-    assert registry._AVAILABILITY["siem_query"](s) is True
-
-
-# ---------------------------------------------------------------------------
-# SIEM — Splunk backend (token auth)
-# ---------------------------------------------------------------------------
-
-
-def test_siem_splunk_unavailable_without_url() -> None:
-    s = _settings(siem_type="splunk", siem_url=None)
-    assert registry._AVAILABILITY["siem_query"](s) is False
-
-
-def test_siem_splunk_unavailable_url_but_no_auth() -> None:
-    s = _settings(siem_type="splunk", siem_url="https://splunk:8089", siem_api_key=None)
-    s.splunk_username = ""
-    s.splunk_password = MagicMock(get_secret_value=MagicMock(return_value=""))
-    assert registry._AVAILABILITY["siem_query"](s) is False
-
-
-def test_siem_splunk_available_with_token() -> None:
-    s = _settings(siem_type="splunk", siem_url="https://splunk:8089")
-    s.siem_api_key = MagicMock(get_secret_value=MagicMock(return_value="mytoken"))
-    assert registry._AVAILABILITY["siem_query"](s) is True
-
-
-def test_siem_splunk_available_with_basic_auth() -> None:
-    s = _settings(siem_type="splunk", siem_url="https://splunk:8089", siem_api_key=None)
-    s.splunk_username = "admin"
-    s.splunk_password = MagicMock(get_secret_value=MagicMock(return_value="argus_splunk_1"))
-    assert registry._AVAILABILITY["siem_query"](s) is True
-
-
-# ---------------------------------------------------------------------------
-# SIEM — webhook/api backend
-# ---------------------------------------------------------------------------
-
-
-def test_siem_webhook_unavailable_without_url() -> None:
-    s = _settings(siem_type="webhook", siem_url=None)
-    assert registry._AVAILABILITY["siem_query"](s) is False
-
-
-def test_siem_webhook_available_with_url() -> None:
-    s = _settings(siem_type="webhook", siem_url="https://siem.internal/api")
-    assert registry._AVAILABILITY["siem_query"](s) is True
 
 
 # ---------------------------------------------------------------------------

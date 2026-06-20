@@ -21,7 +21,6 @@ from argus.config.settings import get_settings
 from argus.llm import create_llm_client
 from argus.storage.database import get_session
 from argus.storage.models_db import AgentRunRecord
-from argus.tools import siem as siem_tool
 
 log = structlog.get_logger()
 
@@ -40,7 +39,6 @@ specialized AI agents to answer complex cybersecurity questions.
 You have access to the following tools:
 - url_fetch: Fetch and return the cleaned text of a specific URL. Use this FIRST when
   the user provides a URL to synthesize or analyze — do not skip or defer this step.
-- siem_query: Fetch raw alert and log events from the SIEM (Splunk or configured backend)
 - threat_actor_agent: Research threat actors, campaigns, and MITRE ATT&CK TTPs
 - vuln_intel_agent: Look up CVE details, exploitation status, CISA KEV, and exposed systems
 - triage_agent: Triage security alerts — requires real alert objects with actual log data
@@ -63,10 +61,6 @@ WORKFLOW — URL QUERIES (highest priority):
      the pre-extracted list. If extracted_iocs is absent, do NOT guess any IPs.
    Issuing both in the same response runs them in parallel — do NOT call one and wait.
 4. Synthesize all results. Reference source URLs from agent outputs in your final answer.
-
-WORKFLOW — SIEM/TRIAGE:
-When asked to triage SIEM alerts, call siem_query first to fetch actual events, then
-pass returned events to triage_agent. Never fabricate alert content.
 
 ANTI-HALLUCINATION — MANDATORY:
 - Report ONLY data returned by tools. Never invent IOC values, actor names, victim names,
@@ -257,12 +251,7 @@ class CTIOrchestrator:
             "triage_agent": TriageAgent(progress=progress),
             "case_analysis_agent": CaseAnalysisAgent(progress=progress),
         }
-        # Include siem_query as a direct tool when SIEM is configured
         self._tool_definitions = list(_AGENT_TOOL_DEFINITIONS)
-        # SIEM tool temporarily disabled — re-enable by uncommenting:
-        # siem_check = _AVAILABILITY.get("siem_query")
-        # if siem_check and siem_check(settings):
-        #     self._tool_definitions.insert(0, siem_tool.get_tool_definition())
 
     def _progress(self, message: str) -> None:
         callback = getattr(self, "progress", None)
@@ -320,7 +309,7 @@ class CTIOrchestrator:
         log.info("orchestrator.routing", agent=tool_name, query=str(query_str)[:200])
         self._progress(f"[orchestrator] → {tool_name}: {str(query_str)[:120]}")
         # Tools that return plain strings (not Pydantic models)
-        _STRING_TOOLS = {"siem_query", "url_fetch", "case_analysis_agent"}
+        _STRING_TOOLS = {"url_fetch", "case_analysis_agent"}
         try:
             if tool_name == "url_fetch":
                 raw_result = await _url_fetch(**tool_input)
@@ -349,8 +338,6 @@ class CTIOrchestrator:
                 log.info("orchestrator.agent_result", agent=tool_name, result_bytes=len(result_str))
                 self._progress(f"[orchestrator] ← {tool_name}: complete ({len(result_str)}B)")
                 return result_str
-            elif tool_name == "siem_query":
-                coro = siem_tool.siem_query(**tool_input)
             elif tool_name == "threat_actor_agent":
                 coro = self._agents["threat_actor_agent"].run(**tool_input)
             elif tool_name == "vuln_intel_agent":

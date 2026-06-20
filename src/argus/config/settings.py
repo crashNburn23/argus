@@ -37,16 +37,6 @@ class Settings(BaseSettings):
     misp_api_key: SecretStr = SecretStr("")
     misp_verify_ssl: bool = True
 
-    # SIEM
-    siem_type: str = "file"
-    siem_url: str | None = None
-    siem_api_key: SecretStr | None = None
-    siem_log_path: str | None = None
-    # Splunk-specific
-    splunk_username: str = ""
-    splunk_password: SecretStr = SecretStr("")
-    splunk_verify_ssl: bool = False
-
     # Storage
     cache_dir: Path = Path(".cache/argus")
     cache_size_bytes: int = 1_073_741_824
