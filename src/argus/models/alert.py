@@ -193,7 +193,9 @@ class AlertTriageResult(BaseModel):
         alerts = data.get("triaged_alerts")
         if isinstance(alerts, list):
             data["triaged_alerts"] = [
-                a for a in alerts if isinstance(a, dict) and bool(_TRIAGE_KEYS & a.keys())
+                a
+                for a in alerts
+                if not isinstance(a, dict) or bool(_TRIAGE_KEYS & a.keys())
             ]
         return data
 
