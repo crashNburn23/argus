@@ -9,6 +9,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 
 from argus.config.settings import get_settings
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter
+from argus.tools.http import get_client
 
 _BASE = "https://api.abuseipdb.com/api/v2"
 
@@ -52,14 +53,13 @@ async def _fetch(ip_address: str, max_age_in_days: int) -> dict[str, Any]:
     await rl.wait_and_acquire()
     settings = get_settings()
     headers = {"Key": settings.api_key("abuseipdb"), "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(
-            f"{_BASE}/check",
-            headers=headers,
-            params={"ipAddress": ip_address, "maxAgeInDays": max_age_in_days, "verbose": True},
-        )
-        resp.raise_for_status()
-        return dict(resp.json())
+    resp = await get_client().get(
+        f"{_BASE}/check",
+        headers=headers,
+        params={"ipAddress": ip_address, "maxAgeInDays": max_age_in_days, "verbose": True},
+    )
+    resp.raise_for_status()
+    return dict(resp.json())
 
 
 async def abuseipdb_check(ip_address: str, max_age_in_days: int = 90) -> str:
@@ -84,8 +84,8 @@ async def abuseipdb_check(ip_address: str, max_age_in_days: int = 90) -> str:
             "is_public": d.get("isPublic", True),
             "last_reported_at": d.get("lastReportedAt", ""),
         }
+        cache_set(cache_key, result, ttl=3600)
+        return json.dumps(result)
     except Exception as e:
-        result = {"error": str(e), "ip_address": ip_address}
-
-    cache_set(cache_key, result, ttl=3600)
-    return json.dumps(result)
+        # Do not cache errors — let the caller retry on next request.
+        return json.dumps({"error": str(e), "ip_address": ip_address})

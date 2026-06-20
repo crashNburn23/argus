@@ -36,6 +36,10 @@ build/
 *.swp
 *~
 
+# Node / frontend
+node_modules/
+package-lock.json
+
 # Working / internal docs
 BACKLOG.md
 UX_BACKLOG.md

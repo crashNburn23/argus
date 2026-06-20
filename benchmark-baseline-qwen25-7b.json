@@ -1,0 +1,207 @@
+{
+  "model_provider": "ollama",
+  "model": "qwen2.5:7b",
+  "case_count": 8,
+  "average_score": 0.2319940476190476,
+  "duration_seconds": 3317.453308756929,
+  "minimum_score": 0.0,
+  "passed": true,
+  "results": [
+    {
+      "case_id": "IR-0001",
+      "score": 0.0,
+      "decision_match": false,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1566.001",
+        "T1059.001"
+      ],
+      "findings_found": [],
+      "findings_missing": [
+        "malicious attachment",
+        "encoded PowerShell"
+      ],
+      "actions_found": [],
+      "actions_missing": [
+        "Isolate FIN-WS-044",
+        "Reset j.smith credentials"
+      ],
+      "duration_seconds": 539.0522182208952,
+      "report_path": "benchmark-reports/IR-0001.md",
+      "baseline_score": 0.14285714285714285,
+      "score_delta": -0.14285714285714285
+    },
+    {
+      "case_id": "IR-0002",
+      "score": 0.14285714285714285,
+      "decision_match": false,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1003.001",
+        "T1021.002"
+      ],
+      "findings_found": [
+        "lateral movement"
+      ],
+      "findings_missing": [
+        "LSASS memory"
+      ],
+      "actions_found": [],
+      "actions_missing": [
+        "Isolate ENG-WS-017",
+        "Disable svc_backup"
+      ],
+      "duration_seconds": 593.7057522598188,
+      "report_path": "benchmark-reports/IR-0002.md",
+      "baseline_score": 0.42857142857142855,
+      "score_delta": -0.2857142857142857
+    },
+    {
+      "case_id": "IR-0003",
+      "score": 0.2857142857142857,
+      "decision_match": false,
+      "techniques_found": [
+        "T1486"
+      ],
+      "techniques_missing": [
+        "T1490"
+      ],
+      "findings_found": [
+        "shadow copies"
+      ],
+      "findings_missing": [
+        "ransom note"
+      ],
+      "actions_found": [],
+      "actions_missing": [
+        "Isolate FILE-07",
+        "Activate ransomware response plan"
+      ],
+      "duration_seconds": 480.09126470587216,
+      "report_path": "benchmark-reports/IR-0003.md",
+      "baseline_score": 0.5714285714285714,
+      "score_delta": -0.2857142857142857
+    },
+    {
+      "case_id": "IR-0004",
+      "score": 0.2857142857142857,
+      "decision_match": true,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1136.003",
+        "T1098.001"
+      ],
+      "findings_found": [
+        "access key"
+      ],
+      "findings_missing": [
+        "privileged cloud user"
+      ],
+      "actions_found": [],
+      "actions_missing": [
+        "Validate the change with ops-admin",
+        "Disable backup-admin pending validation"
+      ],
+      "duration_seconds": 427.4398747771047,
+      "report_path": "benchmark-reports/IR-0004.md",
+      "baseline_score": 0.14285714285714285,
+      "score_delta": 0.14285714285714285
+    },
+    {
+      "case_id": "IR-0005",
+      "score": 0.2,
+      "decision_match": true,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1046"
+      ],
+      "findings_found": [],
+      "findings_missing": [
+        "approved scanner",
+        "CHG-8842"
+      ],
+      "actions_found": [],
+      "actions_missing": [
+        "Close as authorized activity"
+      ],
+      "duration_seconds": 197.95351828914136,
+      "report_path": "benchmark-reports/IR-0005.md",
+      "baseline_score": 0.0,
+      "score_delta": 0.2
+    },
+    {
+      "case_id": "IR-0006",
+      "score": 0.4,
+      "decision_match": false,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1059.001"
+      ],
+      "findings_found": [
+        "approved maintenance",
+        "CHG-9011"
+      ],
+      "findings_missing": [],
+      "actions_found": [],
+      "actions_missing": [
+        "Close as authorized activity"
+      ],
+      "duration_seconds": 264.44215367292054,
+      "report_path": "benchmark-reports/IR-0006.md",
+      "baseline_score": 0.4,
+      "score_delta": 0.0
+    },
+    {
+      "case_id": "IR-0007",
+      "score": 0.375,
+      "decision_match": false,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1505.003",
+        "T1105",
+        "T1053.005"
+      ],
+      "findings_found": [
+        "web shell",
+        "scheduled task"
+      ],
+      "findings_missing": [],
+      "actions_found": [
+        "Isolate WEB-03"
+      ],
+      "actions_missing": [
+        "Preserve forensic evidence"
+      ],
+      "duration_seconds": 401.69670022209175,
+      "report_path": "benchmark-reports/IR-0007.md",
+      "baseline_score": 0.5,
+      "score_delta": -0.125
+    },
+    {
+      "case_id": "IR-0008",
+      "score": 0.16666666666666666,
+      "decision_match": true,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1071.004"
+      ],
+      "findings_found": [],
+      "findings_missing": [
+        "high-entropy DNS queries",
+        "regular cadence"
+      ],
+      "actions_found": [],
+      "actions_missing": [
+        "Collect endpoint telemetry from MKT-WS-028",
+        "Review DNS query payloads"
+      ],
+      "duration_seconds": 413.0674432190135,
+      "report_path": "benchmark-reports/IR-0008.md",
+      "baseline_score": 0.0,
+      "score_delta": 0.16666666666666666
+    }
+  ],
+  "baseline_score": 0.2732142857142857,
+  "score_delta": -0.04122023809523809,
+  "baseline_model": "phi4-mini:3.8b"
+}

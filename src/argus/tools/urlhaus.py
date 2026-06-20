@@ -8,6 +8,7 @@ import httpx
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter
+from argus.tools.http import get_client
 
 _URLHAUS_API = "https://urlhaus-api.abuse.ch/v1/"
 
@@ -46,10 +47,9 @@ def get_tool_definition() -> dict[str, Any]:
 async def _post(endpoint: str, data: dict[str, Any]) -> dict[str, Any]:
     rl = get_rate_limiter("urlhaus")
     await rl.wait_and_acquire()
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(_URLHAUS_API + endpoint, data=data)
-        resp.raise_for_status()
-        return dict(resp.json())
+    resp = await get_client().post(_URLHAUS_API + endpoint, data=data)
+    resp.raise_for_status()
+    return dict(resp.json())
 
 
 async def urlhaus_lookup(

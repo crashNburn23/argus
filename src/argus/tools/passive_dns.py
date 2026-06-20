@@ -8,6 +8,7 @@ import httpx
 
 from argus.config.settings import get_settings
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter
+from argus.tools.http import get_client
 
 _BASE = "https://www.virustotal.com/api/v3"
 
@@ -67,14 +68,13 @@ async def passive_dns_lookup(
     )
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(
-                endpoint,
-                params={"limit": min(limit, 40)},
-                headers=headers,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await get_client().get(
+            endpoint,
+            params={"limit": min(limit, 40)},
+            headers=headers,
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
         resolutions = []
         for item in data.get("data", []):
@@ -94,9 +94,10 @@ async def passive_dns_lookup(
             "indicator_type": indicator_type,
             "resolution_count": len(resolutions),
             "resolutions": resolutions,
+            "status": "ok" if resolutions else "no_data",
         }
     except Exception as e:
-        result = {"error": str(e), "indicator": indicator}
+        result = {"error": str(e), "indicator": indicator, "status": "error"}
 
     cache_set(cache_key, result, ttl=3600)
     return json.dumps(result)

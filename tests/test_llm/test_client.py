@@ -95,7 +95,11 @@ def _mock_anthropic(text: str | None = None, tool_calls: list | None = None,
     )
     client = AnthropicClient.__new__(AnthropicClient)
     client._client = MagicMock()
-    client._client.messages.create = MagicMock(return_value=fake_response)
+    stream_ctx = MagicMock()
+    stream_ctx.__enter__ = MagicMock(return_value=stream_ctx)
+    stream_ctx.__exit__ = MagicMock(return_value=False)
+    stream_ctx.get_final_message = MagicMock(return_value=fake_response)
+    client._client.messages.stream = MagicMock(return_value=stream_ctx)
     return client
 
 
@@ -139,6 +143,6 @@ def test_anthropic_forwards_kwargs_to_sdk() -> None:
         system="sys",
         messages=[{"role": "user", "content": "go"}],
     )
-    call_kwargs = client._client.messages.create.call_args.kwargs
+    call_kwargs = client._client.messages.stream.call_args.kwargs
     assert call_kwargs["model"] == "claude-opus-4-8"
     assert call_kwargs["max_tokens"] == 2048

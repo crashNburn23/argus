@@ -9,6 +9,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 
 from argus.config.settings import get_settings
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter
+from argus.tools.http import get_client
 
 _BASE = "https://www.virustotal.com/api/v3"
 
@@ -19,6 +20,12 @@ _VT_TYPE_MAP = {
     "md5": "files",
     "sha1": "files",
     "sha256": "files",
+    # common aliases models use that aren't in the schema enum
+    "ip_address": "ip_addresses",
+    "ipaddress": "ip_addresses",
+    "file_hash": "files",
+    "hash": "files",
+    "file": "files",
 }
 
 
@@ -61,10 +68,9 @@ async def _fetch(endpoint: str) -> dict[str, Any]:
     await rl.wait_and_acquire()
     settings = get_settings()
     headers = {"x-apikey": settings.api_key("virustotal")}
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(f"{_BASE}/{endpoint}", headers=headers)
-        resp.raise_for_status()
-        return dict(resp.json())
+    resp = await get_client().get(f"{_BASE}/{endpoint}", headers=headers)
+    resp.raise_for_status()
+    return dict(resp.json())
 
 
 def _normalize(raw: dict[str, Any], indicator: str, ioc_type: str) -> dict[str, Any]:
@@ -98,26 +104,29 @@ async def virustotal_lookup(indicator: str, ioc_type: str) -> str:
     if cached:
         return json.dumps(cached)
 
-    vt_type = _VT_TYPE_MAP.get(ioc_type)
+    # normalise aliases before lookup
+    ioc_type_norm = ioc_type.lower()
+    vt_type = _VT_TYPE_MAP.get(ioc_type_norm)
     if not vt_type:
-        return json.dumps({"error": f"Unsupported ioc_type: {ioc_type}"})
+        return json.dumps({"error": f"Unsupported ioc_type: {ioc_type!r}. Use: ip, domain, url, md5, sha1, sha256"})
 
     try:
-        if ioc_type == "url":
+        if ioc_type_norm == "url":
             import base64
             url_id = base64.urlsafe_b64encode(indicator.encode()).decode().rstrip("=")
             raw = await _fetch(f"urls/{url_id}")
         else:
             raw = await _fetch(f"{vt_type}/{indicator}")
-        result = _normalize(raw, indicator, ioc_type)
+        result = _normalize(raw, indicator, ioc_type_norm)
+        cache_set(cache_key, result, ttl=3600)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            result = {"indicator": indicator, "ioc_type": ioc_type, "status": "not_found",
+            result = {"indicator": indicator, "ioc_type": ioc_type_norm, "status": "not_found",
                       "malicious": 0, "total_engines": 0}
+            cache_set(cache_key, result, ttl=3600)
         else:
             result = {"error": str(e), "indicator": indicator}
     except Exception as e:
         result = {"error": str(e), "indicator": indicator}
 
-    cache_set(cache_key, result, ttl=3600)
     return json.dumps(result)

@@ -22,6 +22,7 @@ from argus.tools import (
     whois,
 )
 
+
 # Maps tool name → availability check lambda
 _AVAILABILITY: dict[str, Callable[..., bool]] = {
     "virustotal_lookup": lambda s: bool(s.api_key("virustotal")),
@@ -52,6 +53,7 @@ _AVAILABILITY: dict[str, Callable[..., bool]] = {
     "nvd_cve_lookup": lambda s: True,
     "urlhaus_lookup": lambda s: True,
     "web_search": lambda s: True,
+    "url_fetch": lambda s: True,
 }
 
 # Maps tool name → definition getter
@@ -70,6 +72,7 @@ _DEFINITIONS: dict[str, Callable[[], dict[str, Any]]] = {
     "passive_dns_lookup": passive_dns.get_tool_definition,
     "ssl_cert_lookup": certs.get_tool_definition,
     "whois_lookup": whois.get_tool_definition,
+    "url_fetch": web_search.get_url_fetch_tool_definition,
 }
 
 # Which tools each agent type uses
@@ -83,6 +86,11 @@ _AGENT_TOOLS: dict[str, list[str]] = {
     "triage": ["virustotal_lookup", "abuseipdb_check", "otx_lookup", "mitre_attack_lookup"],
     "report": ["siem_query"],
     "orchestrator": [],  # orchestrator uses agents as tools
+    "case_analysis": [
+        "virustotal_lookup", "shodan_lookup", "abuseipdb_check", "otx_lookup", "urlhaus_lookup",
+        "passive_dns_lookup", "ssl_cert_lookup", "whois_lookup", "mitre_attack_lookup",
+        "recorded_future_search", "web_search", "url_fetch",
+    ],
 }
 
 
@@ -122,7 +130,8 @@ def tool_status() -> list[dict[str, Any]]:
 
         if available:
             reason = "ready (no key required)" if check(settings) and name in (
-                "mitre_attack_lookup", "nvd_cve_lookup", "urlhaus_lookup", "web_search"
+                "mitre_attack_lookup", "nvd_cve_lookup", "urlhaus_lookup",
+                "web_search", "url_fetch",
             ) else "API key configured"
         else:
             # Derive a human-readable reason
@@ -173,6 +182,7 @@ async def dispatch_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
         "nvd_cve_lookup": nvd.nvd_cve_lookup,
         "urlhaus_lookup": urlhaus.urlhaus_lookup,
         "web_search": web_search.web_search,
+        "url_fetch": web_search.url_fetch,
         "passive_dns_lookup": passive_dns.passive_dns_lookup,
         "ssl_cert_lookup": certs.ssl_cert_lookup,
         "whois_lookup": whois.whois_lookup,
@@ -182,4 +192,32 @@ async def dispatch_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
     if handler is None:
         import json
         return json.dumps({"error": f"Unknown tool: {tool_name}"})
-    return str(await handler(**tool_input))
+
+    # Normalize mismatched argument names the LLM sometimes produces.
+    if tool_name == "recorded_future_search" and "query" in tool_input and "entity" not in tool_input:
+        tool_input = {**tool_input, "entity": tool_input.pop("query"), "entity_type": tool_input.get("entity_type", "actor")}
+    if tool_name == "ssl_cert_lookup" and "query" in tool_input and "indicator" not in tool_input:
+        import json
+        return json.dumps({"error": "ssl_cert_lookup requires indicator + indicator_type, not a search query"})
+    if tool_name == "passive_dns_lookup" and "ioc_type" in tool_input and "indicator_type" not in tool_input:
+        tool_input = {**tool_input, "indicator_type": tool_input.pop("ioc_type")}
+    if tool_name == "passive_dns_lookup" and "ip" in tool_input and "indicator" not in tool_input:
+        tool_input = {**tool_input, "indicator": tool_input.pop("ip")}
+
+    result = str(await handler(**tool_input))
+
+    # Truncate url_fetch content so sub-agents don't accumulate huge context.
+    # Large context (7 articles × 10KB) causes very slow LLM calls.
+    if tool_name == "url_fetch":
+        import json as _json
+        try:
+            parsed = _json.loads(result)
+            if parsed.get("status") == "ok" and parsed.get("content"):
+                content = parsed["content"]
+                if len(content) > 4000:
+                    parsed["content"] = content[:4000] + "\n[truncated]"
+                    result = _json.dumps(parsed)
+        except Exception:
+            pass
+
+    return result

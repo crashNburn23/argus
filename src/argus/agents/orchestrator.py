@@ -10,6 +10,8 @@ from typing import Any
 
 import structlog
 
+from argus.agents.base import _llm_call_with_retry
+from argus.agents.case_analysis_agent import CaseAnalysisAgent
 from argus.agents.errors import AgentError
 from argus.agents.threat_actor_agent import ThreatActorAgent
 from argus.agents.triage_agent import TriageAgent
@@ -24,8 +26,9 @@ from argus.tools.registry import _AVAILABILITY
 log = structlog.get_logger()
 
 MAX_ITERATIONS = 8
-MAX_COMPLETION_RETRIES = 2   # verification cycles after the main loop
-MAX_GAP_FILL_ITERATIONS = 4  # agent calls allowed per gap-fill cycle
+MAX_COMPLETION_RETRIES = 1   # one verification cycle is usually sufficient
+MAX_GAP_FILL_ITERATIONS = 2  # limit gap-fill depth to avoid runaway loops
+AGENT_TIMEOUT_SECONDS = 3600  # hard cutoff per sub-agent call (60 min); streaming prevents idle drops
 ProgressCallback = Callable[[str], None]
 
 _SYSTEM = """\
@@ -33,23 +36,45 @@ You are the CTI Orchestrator — a senior threat intelligence analyst who coordi
 specialized AI agents to answer complex cybersecurity questions.
 
 You have access to the following tools:
+- url_fetch: Fetch and return the cleaned text of a specific URL. Use this FIRST when
+  the user provides a URL to synthesize or analyze — do not skip or defer this step.
 - siem_query: Fetch raw alert and log events from the SIEM (Splunk or configured backend)
 - threat_actor_agent: Research threat actors, campaigns, and MITRE ATT&CK TTPs
 - vuln_intel_agent: Look up CVE details, exploitation status, CISA KEV, and exposed systems
 - triage_agent: Triage security alerts — requires real alert objects with actual log data
+- case_analysis_agent: Enrich and pivot on IOCs (IPs, domains, hashes, URLs) found in
+  reports or articles. Performs mandatory infrastructure pivoting. Use when a page or
+  report contains indicators that need enrichment.
 
-Note: IOC enrichment (IPs, domains, hashes) is handled via `argus case enrich` in the
-case workflow. Direct your users there for indicator enrichment with provenance tracking.
+WORKFLOW — URL QUERIES (highest priority):
+1. Call url_fetch on every URL in the user's query before doing anything else.
+2. Read the url_fetch result. The result includes:
+   - "content": first 3000 chars of the article (truncated for routing)
+   - "extracted_iocs": structured IOCs pre-extracted by Python regex — use these as-is.
+   From the content, identify:
+     - Threat actor name + incident context (e.g. "Icarus extortion group Klue OAuth
+       breach June 2026", NOT just "Icarus" which may match unrelated groups)
+3. In your NEXT response after url_fetch, issue BOTH tool calls in the SAME response:
+   - threat_actor_agent: pass the actor name WITH incident context to disambiguate
+   - case_analysis_agent: pass extracted_iocs.ips and extracted_iocs.domains directly
+     from the url_fetch result. Do NOT copy IPs from the article text yourself — use
+     the pre-extracted list. If extracted_iocs is absent, do NOT guess any IPs.
+   Issuing both in the same response runs them in parallel — do NOT call one and wait.
+4. Synthesize all results. Reference source URLs from agent outputs in your final answer.
 
-IMPORTANT — fetching SIEM data before triage:
-When asked to triage, analyze, or report on SIEM alerts or log events, you MUST call
-siem_query first to fetch the actual events. Pass the returned events as the `alerts`
-list to triage_agent. Never fabricate alert content — only triage data that siem_query
-returned. If siem_query returns an error or no results, report that to the user instead
-of inventing alerts.
+WORKFLOW — SIEM/TRIAGE:
+When asked to triage SIEM alerts, call siem_query first to fetch actual events, then
+pass returned events to triage_agent. Never fabricate alert content.
 
-Decide which tools to invoke based on the user's request. Synthesize results into a
-clear, actionable response. Be specific and reference evidence from findings."""
+ANTI-HALLUCINATION — MANDATORY:
+- Report ONLY data returned by tools. Never invent IOC values, actor names, victim names,
+  TTPs, or attribution that tools did not return.
+- If a tool returns no data or an error, say so explicitly — omitting failures misleads.
+- Every attribution claim (actor, campaign, malware family) MUST cite a source URL.
+- "No data found" from a tool is a valid and credible answer; do not paper over it.
+
+Synthesize results into a clear, actionable CTI response. Be specific and reference
+evidence from tool findings."""
 
 _COMPLETION_CHECK_SYSTEM = """\
 You are a senior CTI analyst verifying that an analysis fully answers the original question.
@@ -71,10 +96,27 @@ Definitions:
 Rules:
 - "No data found" is a valid answer, not a gap.
 - Do NOT mark a gap as retriable if a tool already attempted it and returned an error.
+- Agent timeouts ("timed out") are ALWAYS permanent — the service is slow or unavailable;
+  retrying will time out again. Mark them permanent without exception.
 - Prefer marking ambiguous gaps as permanent over triggering endless retries."""
 
 # Sub-agent tool definitions (always present)
 _AGENT_TOOL_DEFINITIONS = [
+    {
+        "name": "url_fetch",
+        "description": (
+            "Fetch and return the cleaned text content of a specific URL (article, report, "
+            "advisory, blog post). Use this FIRST when the user provides a URL to synthesize "
+            "or analyze. Do not skip this step. Returns plain text with HTML stripped."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "The URL to fetch"},
+            },
+            "required": ["url"],
+        },
+    },
     {
         "name": "threat_actor_agent",
         "description": (
@@ -147,6 +189,52 @@ _AGENT_TOOL_DEFINITIONS = [
             "required": ["alerts"],
         },
     },
+    {
+        "name": "case_analysis_agent",
+        "description": (
+            "Enrich and pivot on IOCs (IPs, domains, file hashes) extracted from "
+            "articles, reports, or advisories. Performs mandatory infrastructure pivoting: "
+            "passive DNS, WHOIS, certificate SANs, VirusTotal, Shodan. Use when a URL or "
+            "report contains indicators that need enrichment. Call simultaneously with "
+            "threat_actor_agent when both actor info and IOCs are present. "
+            "IMPORTANT: Only list IOCs that appear verbatim in the fetched article. "
+            "Never infer, estimate, or placeholder IOC values."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ips": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "IP addresses found verbatim in the article text. "
+                        "Omit if none are present — do NOT invent or estimate IPs."
+                    ),
+                },
+                "domains": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Domain names found verbatim in the article text. "
+                        "Omit if none are present."
+                    ),
+                },
+                "hashes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "File hashes (MD5/SHA256) found verbatim in the article.",
+                },
+                "context": {
+                    "type": "string",
+                    "description": (
+                        "Brief description of the incident and source URL, "
+                        "e.g. 'Klue OAuth breach by Icarus, source: https://...'"
+                    ),
+                },
+            },
+            "required": ["context"],
+        },
+    },
 ]
 
 
@@ -166,12 +254,14 @@ class CTIOrchestrator:
             "threat_actor_agent": ThreatActorAgent(progress=progress),
             "vuln_intel_agent": VulnIntelAgent(progress=progress),
             "triage_agent": TriageAgent(progress=progress),
+            "case_analysis_agent": CaseAnalysisAgent(progress=progress),
         }
         # Include siem_query as a direct tool when SIEM is configured
         self._tool_definitions = list(_AGENT_TOOL_DEFINITIONS)
-        siem_check = _AVAILABILITY.get("siem_query")
-        if siem_check and siem_check(settings):
-            self._tool_definitions.insert(0, siem_tool.get_tool_definition())
+        # SIEM tool temporarily disabled — re-enable by uncommenting:
+        # siem_check = _AVAILABILITY.get("siem_query")
+        # if siem_check and siem_check(settings):
+        #     self._tool_definitions.insert(0, siem_tool.get_tool_definition())
 
     def _progress(self, message: str) -> None:
         callback = getattr(self, "progress", None)
@@ -203,24 +293,95 @@ class CTIOrchestrator:
     def clear_conversation(self) -> None:
         self._conversation.clear()
 
+    # Public IPs only (RFC1918/loopback excluded).
+    _IP_RE = re.compile(
+        r"\b(?!10\.|127\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.)"
+        r"(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b"
+    )
+
+    @classmethod
+    def _extract_iocs_from_text(cls, text: str) -> dict[str, list[str]]:
+        ips = list(dict.fromkeys(cls._IP_RE.findall(text)))
+        return {"ips": ips[:20], "domains": []}
+
     async def _invoke_agent(self, tool_name: str, tool_input: dict[str, Any]) -> str:
+        from argus.tools.web_search import url_fetch as _url_fetch
+
         detail = self._summarize_agent_input(tool_input)
-        self._progress(f"orchestrator: routing {detail} to {tool_name}")
+        _ips = tool_input.get("ips") or []
+        query_str = (
+            tool_input.get("url")
+            or tool_input.get("query")
+            or (", ".join(str(ip) for ip in _ips[:4]) if _ips else None)
+            or ", ".join(str(c) for c in (tool_input.get("cve_ids") or [])[:5])
+            or detail
+        )
+        log.info("orchestrator.routing", agent=tool_name, query=str(query_str)[:200])
+        self._progress(f"[orchestrator] → {tool_name}: {str(query_str)[:120]}")
+        # Tools that return plain strings (not Pydantic models)
+        _STRING_TOOLS = {"siem_query", "url_fetch", "case_analysis_agent"}
         try:
-            if tool_name == "siem_query":
-                return await siem_tool.siem_query(**tool_input)
-            elif tool_name == "ioc_enrichment_agent":
-                result = await self._agents["ioc_enrichment_agent"].run(**tool_input)
+            if tool_name == "url_fetch":
+                raw_result = await _url_fetch(**tool_input)
+                try:
+                    parsed = json.loads(raw_result)
+                    if parsed.get("status") == "ok" and parsed.get("content"):
+                        content = parsed["content"]
+                        extracted = self._extract_iocs_from_text(content)
+                        if extracted["ips"]:
+                            parsed["extracted_iocs"] = extracted
+                            log.info(
+                                "orchestrator.ioc_extract",
+                                ips=extracted["ips"],
+                                count=len(extracted["ips"]),
+                            )
+                        # Truncate article for orchestrator routing context —
+                        # extracted_iocs carries the structured data; agents can
+                        # url_fetch the full article themselves if they need it.
+                        if len(content) > 3000:
+                            parsed["content"] = content[:3000] + "\n[truncated for routing]"
+                        raw_result = json.dumps(parsed)
+                except Exception:
+                    pass
+                coro_result = raw_result
+                result_str = coro_result
+                log.info("orchestrator.agent_result", agent=tool_name, result_bytes=len(result_str))
+                self._progress(f"[orchestrator] ← {tool_name}: complete ({len(result_str)}B)")
+                return result_str
+            elif tool_name == "siem_query":
+                coro = siem_tool.siem_query(**tool_input)
             elif tool_name == "threat_actor_agent":
-                result = await self._agents["threat_actor_agent"].run(**tool_input)
+                coro = self._agents["threat_actor_agent"].run(**tool_input)
             elif tool_name == "vuln_intel_agent":
-                result = await self._agents["vuln_intel_agent"].run(**tool_input)
+                coro = self._agents["vuln_intel_agent"].run(**tool_input)
             elif tool_name == "triage_agent":
-                result = await self._agents["triage_agent"].run(**tool_input)
+                coro = self._agents["triage_agent"].run(**tool_input)
+            elif tool_name == "case_analysis_agent":
+                # Build structured query from typed IOC fields (new schema)
+                ips = tool_input.get("ips") or []
+                domains = tool_input.get("domains") or []
+                hashes = tool_input.get("hashes") or []
+                context = tool_input.get("context") or tool_input.get("query") or ""
+                parts = [context]
+                if ips:
+                    parts.append(f"IPs: {', '.join(str(ip) for ip in ips)}")
+                if domains:
+                    parts.append(f"Domains: {', '.join(str(d) for d in domains)}")
+                if hashes:
+                    parts.append(f"Hashes: {', '.join(str(h) for h in hashes)}")
+                coro = self._agents["case_analysis_agent"].run(query=". ".join(parts))
             else:
                 return json.dumps({"error": f"Unknown agent: {tool_name}"})
-            self._progress(f"orchestrator: {tool_name} returned findings")
-            return str(result.model_dump_json())
+            result = await asyncio.wait_for(coro, timeout=AGENT_TIMEOUT_SECONDS)
+            result_str = (
+                str(result) if tool_name in _STRING_TOOLS else str(result.model_dump_json())
+            )
+            log.info("orchestrator.agent_result", agent=tool_name, result_bytes=len(result_str))
+            self._progress(f"[orchestrator] ← {tool_name}: complete ({len(result_str)}B)")
+            return result_str
+        except TimeoutError:
+            log.error("orchestrator.agent_error", agent=tool_name, error="timed out")
+            return json.dumps({"error": True, "agent": tool_name, "message": "timed out"})
         except AgentError as e:
             log.error(
                 "orchestrator.agent_error",
@@ -244,12 +405,17 @@ class CTIOrchestrator:
         final_text: str | None = None
 
         log.info("orchestrator.start", query_len=len(user_query))
-        self._progress("orchestrator: reading request and selecting analysis path")
+        log.info("orchestrator.input", text=user_query[:500])
+        q_excerpt = user_query[:120].replace("\n", " ")
+        self._progress(
+            f"[orchestrator] question ({len(user_query)} chars): "
+            f"{q_excerpt}{'…' if len(user_query) > 120 else ''}"
+        )
 
         for iteration in range(MAX_ITERATIONS):
             if iteration > 0:
                 self._progress("orchestrator: reviewing agent findings")
-            response = await asyncio.to_thread(
+            response = await _llm_call_with_retry(
                 self.client.create_message,
                 model=self.model,
                 max_tokens=8192,
@@ -283,17 +449,18 @@ class CTIOrchestrator:
                 break
 
             messages.append({"role": "assistant", "content": response.content})
-            tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    log.info("orchestrator.agent_call", agent=block.name)
-                    self._progress(f"orchestrator: decided {block.name} is needed")
-                    agent_result = await self._invoke_agent(block.name, dict(block.input))
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": agent_result,
-                    })
+            tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
+            for block in tool_use_blocks:
+                log.info("orchestrator.agent_call", agent=block.name)
+                self._progress(f"orchestrator: decided {block.name} is needed")
+
+            async def _call_agent(block: Any) -> dict[str, Any]:
+                result = await self._invoke_agent(block.name, dict(block.input))
+                return {"type": "tool_result", "tool_use_id": block.id, "content": result}
+
+            tool_results = list(
+                await asyncio.gather(*(_call_agent(b) for b in tool_use_blocks))
+            )
             messages.append({"role": "user", "content": tool_results})
 
         if final_text is None:
@@ -365,7 +532,7 @@ class CTIOrchestrator:
             f"CURRENT ANALYSIS:\n{current_answer}"
         )
         try:
-            response = await asyncio.to_thread(
+            response = await _llm_call_with_retry(
                 self.client.create_message,
                 model=self.model,
                 max_tokens=1024,
@@ -426,16 +593,17 @@ class CTIOrchestrator:
                 if response.stop_reason != "tool_use":
                     break
                 fill_messages.append({"role": "assistant", "content": response.content})
-                tool_results = []
-                for block in response.content:
-                    if block.type == "tool_use":
-                        self._progress(f"orchestrator: gap-fill calling {block.name}")
-                        agent_result = await self._invoke_agent(block.name, dict(block.input))
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": agent_result,
-                        })
+                fill_blocks = [b for b in response.content if b.type == "tool_use"]
+                for block in fill_blocks:
+                    self._progress(f"orchestrator: gap-fill calling {block.name}")
+
+                async def _call_fill(block: Any) -> dict[str, Any]:
+                    result = await self._invoke_agent(block.name, dict(block.input))
+                    return {"type": "tool_result", "tool_use_id": block.id, "content": result}
+
+                tool_results = list(
+                    await asyncio.gather(*(_call_fill(b) for b in fill_blocks))
+                )
                 fill_messages.append({"role": "user", "content": tool_results})
         except Exception as exc:
             log.warning("orchestrator.gap_fill_failed", error=str(exc))

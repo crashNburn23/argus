@@ -1,6 +1,7 @@
 """Shodan tool — requires SHODAN_API_KEY."""
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -46,7 +47,8 @@ async def shodan_lookup(
         api = shodan_lib.Shodan(settings.api_key("shodan"))
 
         if ip:
-            host = api.host(ip)
+            host = await asyncio.to_thread(api.host, ip)
+            _vulns = host.get("vulns") or {}
             result = {
                 "ip": ip,
                 "ports": host.get("ports", []),
@@ -55,7 +57,7 @@ async def shodan_lookup(
                 "org": host.get("org", ""),
                 "isp": host.get("isp", ""),
                 "os": host.get("os", ""),
-                "vulns": list(host.get("vulns", {}).keys())[:20],
+                "vulns": list(_vulns.keys() if isinstance(_vulns, dict) else _vulns)[:20],
                 "tags": host.get("tags", []),
                 "services": [
                     {"port": s.get("port"), "transport": s.get("transport", ""),
@@ -64,7 +66,7 @@ async def shodan_lookup(
                 ],
             }
         elif cve:
-            search_result = api.search(f"vuln:{cve}", limit=10)
+            search_result = await asyncio.to_thread(api.search, f"vuln:{cve}", limit=10)
             result = {
                 "cve": cve,
                 "total_exposed": search_result.get("total", 0),
@@ -79,7 +81,7 @@ async def shodan_lookup(
                 ],
             }
         elif query:
-            search_result = api.search(query, limit=10)
+            search_result = await asyncio.to_thread(api.search, query, limit=10)
             result = {
                 "query": query,
                 "total": search_result.get("total", 0),
@@ -97,7 +99,11 @@ async def shodan_lookup(
             return json.dumps({"error": "Provide ip, cve, or query"})
 
     except Exception as e:
-        result = {"error": str(e), "indicator": indicator}
+        msg = str(e)
+        if "No information available" in msg or "404" in msg:
+            result = {"indicator": indicator, "status": "not_found"}
+        else:
+            result = {"error": msg, "indicator": indicator, "status": "error"}
 
     cache_set(cache_key, result, ttl=86400)
     return json.dumps(result)

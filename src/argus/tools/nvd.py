@@ -1,6 +1,7 @@
 """NVD CVE lookup tool — no API key required."""
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -9,6 +10,7 @@ import httpx
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter
+from argus.tools.http import get_client
 
 _NVD_BASE = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 _CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
@@ -27,14 +29,21 @@ def get_tool_definition() -> dict[str, Any]:
         "name": "nvd_cve_lookup",
         "description": (
             "Look up CVE vulnerability information from NVD. Also checks CISA KEV list. "
-            "Provide cve_id for a specific CVE, or keyword/severity to search."
+            "Pass cve_ids (list) to look up multiple CVEs in parallel in a single call — "
+            "always prefer this over multiple single-CVE calls. "
+            "Use keyword/severity/days_back for search queries."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
+                "cve_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of CVE IDs to look up in parallel, e.g. ['CVE-2021-44228', 'CVE-2023-23397']",
+                },
                 "cve_id": {
                     "type": "string",
-                    "description": "CVE ID, e.g. CVE-2021-44228",
+                    "description": "Single CVE ID (use cve_ids list instead when looking up multiple)",
                 },
                 "keyword": {
                     "type": "string",
@@ -59,13 +68,12 @@ async def _get_cisa_kev_ids() -> set[str]:
     if cached:
         return set(cached)
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(_CISA_KEV_URL)
-            resp.raise_for_status()
-            data = resp.json()
-            ids = [v["cveID"] for v in data.get("vulnerabilities", [])]
-            cache_set(_CISA_KEV_CACHE_KEY, ids, ttl=_CISA_KEV_TTL)
-            return set(ids)
+        resp = await get_client().get(_CISA_KEV_URL)
+        resp.raise_for_status()
+        data = resp.json()
+        ids = [v["cveID"] for v in data.get("vulnerabilities", [])]
+        cache_set(_CISA_KEV_CACHE_KEY, ids, ttl=_CISA_KEV_TTL)
+        return set(ids)
     except Exception:
         return set()
 
@@ -118,21 +126,71 @@ def _normalize_cve(item: dict[str, Any], kev_ids: set[str]) -> dict[str, Any]:
 async def _fetch_nvd(params: dict[str, Any]) -> dict[str, Any]:
     rl = get_rate_limiter("nvd")
     await rl.wait_and_acquire()
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(_NVD_BASE, params=params)
-        resp.raise_for_status()
-        return dict(resp.json())
+    resp = await get_client().get(_NVD_BASE, params=params)
+    resp.raise_for_status()
+    return dict(resp.json())
+
+
+async def _lookup_one(cve_id: str, kev_ids: set[str]) -> dict[str, Any]:
+    """Fetch and cache a single CVE by ID. Used by the batch path."""
+    cache_key = f"nvd:{cve_id}:::"
+    cached = cache_get(cache_key)
+    # Only return cache if it's a success (has vulnerabilities key, no error key).
+    if cached and "error" not in cached:
+        return cached  # type: ignore[return-value]
+    try:
+        data = await _fetch_nvd({"cveId": cve_id})
+        vulns = [_normalize_cve(item, kev_ids) for item in data.get("vulnerabilities", [])]
+        result: dict[str, Any] = {
+            "total_results": data.get("totalResults", 0),
+            "vulnerabilities": vulns[:20],
+            "cisa_kev_matches": [v["cve_id"] for v in vulns if v["in_cisa_kev"]],
+        }
+        cache_set(cache_key, result, ttl=86400)
+        return result
+    except Exception as e:
+        # Do not cache errors — let the caller retry on next request.
+        return {"error": str(e), "cve_id": cve_id, "vulnerabilities": []}
 
 
 async def nvd_cve_lookup(
     cve_id: str = "",
+    cve_ids: list[str] | None = None,
     keyword: str = "",
     severity: str = "",
     days_back: int | None = None,
 ) -> str:
+    ids = [c.strip().upper() for c in (cve_ids or []) if c.strip()]
+    if not ids and cve_id:
+        ids = [cve_id.strip().upper()]
+
+    # Batch path: multiple CVEs fetched in parallel, one CISA KEV request shared
+    if ids and not keyword and not severity and not days_back:
+        kev_ids = await _get_cisa_kev_ids()
+        per_cve = await asyncio.gather(*(_lookup_one(i, kev_ids) for i in ids))
+        all_vulns: list[dict[str, Any]] = []
+        all_kev: list[str] = []
+        errors: list[str] = []
+        for r in per_cve:
+            if "error" in r:
+                errors.append(f"{r.get('cve_id', '?')}: {r['error']}")
+            else:
+                all_vulns.extend(r.get("vulnerabilities", []))
+                all_kev.extend(r.get("cisa_kev_matches", []))
+        combined: dict[str, Any] = {
+            "total_results": len(all_vulns),
+            "vulnerabilities": all_vulns[:20],
+            "cisa_kev_matches": list(dict.fromkeys(all_kev)),
+        }
+        if errors:
+            combined["errors"] = errors
+        return json.dumps(combined)
+
+    # Search/filter path (keyword / severity / days_back)
     cache_key = f"nvd:{cve_id}:{keyword}:{severity}:{days_back}"
     cached = cache_get(cache_key)
-    if cached:
+    # Only use cache if it's a successful result (no error key).
+    if cached and "error" not in cached:
         return json.dumps(cached)
 
     kev_ids = await _get_cisa_kev_ids()
@@ -158,8 +216,8 @@ async def nvd_cve_lookup(
             "vulnerabilities": vulns[:20],
             "cisa_kev_matches": [v["cve_id"] for v in vulns if v["in_cisa_kev"]],
         }
+        cache_set(cache_key, result, ttl=86400)
+        return json.dumps(result)
     except Exception as e:
-        result = {"error": str(e), "vulnerabilities": []}
-
-    cache_set(cache_key, result, ttl=86400)
-    return json.dumps(result)
+        # Do not cache errors — let the caller retry on next request.
+        return json.dumps({"error": str(e), "vulnerabilities": []})

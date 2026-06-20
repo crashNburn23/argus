@@ -520,7 +520,7 @@ def delete_case(
     console.print(f"[cp.green]deleted[/cp.green] [cp.cyan]{case_id}[/cp.cyan]")
 
 
-_VALID_ENRICH_SOURCES = frozenset({"abuseipdb", "shodan", "virustotal", "nvd"})
+_VALID_ENRICH_SOURCES = frozenset({"abuseipdb", "shodan", "virustotal", "nvd", "otx"})
 
 
 @app.command("enrich")
@@ -539,7 +539,7 @@ def enrich_case_observables(
         typer.Option(
             "--sources",
             "-s",
-            help="Comma-separated list of sources to use (abuseipdb,shodan,virustotal,nvd)",
+            help="Comma-separated list of sources to use (abuseipdb,shodan,virustotal,nvd,otx)",
         ),
     ] = None,
     min_confidence: Annotated[
@@ -593,6 +593,7 @@ def enrich_case_observables(
     existing_enrichments: set[tuple[str, str]] = {
         (ev.metadata.get("enrichment_source", ""), obs_id)
         for ev in case.evidence
+        if ev.status != EvidenceStatus.FAILED
         for obs_id in ev.observable_ids
         if ev.metadata.get("enrichment_source")
     }
@@ -664,6 +665,7 @@ async def _run_enrichment(
     vt_key = settings.api_key("virustotal")
     shodan_key = settings.api_key("shodan")
     abuseipdb_key = settings.api_key("abuseipdb")
+    otx_key = settings.api_key("otx")
 
     all_tasks: list[tuple[Observable, str, Any]] = []
     for obs in observables:
@@ -686,6 +688,13 @@ async def _run_enrichment(
             ):
                 from argus.tools.shodan import shodan_lookup
                 all_tasks.append((obs, "shodan", shodan_lookup(ip=value)))
+            if (
+                otx_key
+                and _source_allowed("otx", allowed_sources)
+                and ("otx", oid) not in existing_enrichments
+            ):
+                from argus.tools.alienvault_otx import otx_lookup
+                all_tasks.append((obs, "otx", otx_lookup(value, "ip")))
         elif obs_type == ObservableType.DOMAIN:
             if (
                 vt_key
@@ -694,6 +703,13 @@ async def _run_enrichment(
             ):
                 from argus.tools.virustotal import virustotal_lookup
                 all_tasks.append((obs, "virustotal", virustotal_lookup(value, "domain")))
+            if (
+                otx_key
+                and _source_allowed("otx", allowed_sources)
+                and ("otx", oid) not in existing_enrichments
+            ):
+                from argus.tools.alienvault_otx import otx_lookup
+                all_tasks.append((obs, "otx", otx_lookup(value, "domain")))
         elif obs_type == ObservableType.URL:
             if (
                 vt_key
@@ -702,6 +718,13 @@ async def _run_enrichment(
             ):
                 from argus.tools.virustotal import virustotal_lookup
                 all_tasks.append((obs, "virustotal", virustotal_lookup(value, "url")))
+            if (
+                otx_key
+                and _source_allowed("otx", allowed_sources)
+                and ("otx", oid) not in existing_enrichments
+            ):
+                from argus.tools.alienvault_otx import otx_lookup
+                all_tasks.append((obs, "otx", otx_lookup(value, "url")))
         elif obs_type in {ObservableType.MD5, ObservableType.SHA1, ObservableType.SHA256}:
             if (
                 vt_key
@@ -710,6 +733,13 @@ async def _run_enrichment(
             ):
                 from argus.tools.virustotal import virustotal_lookup
                 all_tasks.append((obs, "virustotal", virustotal_lookup(value, obs_type.value)))
+            if (
+                otx_key
+                and _source_allowed("otx", allowed_sources)
+                and ("otx", oid) not in existing_enrichments
+            ):
+                from argus.tools.alienvault_otx import otx_lookup
+                all_tasks.append((obs, "otx", otx_lookup(value, "file")))
         elif obs_type == ObservableType.CVE:
             if (
                 _source_allowed("nvd", allowed_sources)
@@ -791,9 +821,15 @@ def _summarize_enrichment(
         score = data.get("abuse_confidence_score", 0)
         reports = data.get("total_reports", 0)
         country = data.get("country_code", "")
+        isp = data.get("isp", "")
+        usage = data.get("usage_type", "")
         summary = f"AbuseIPDB: score={score}/100, {reports} report(s)"
         if country:
             summary += f", country={country}"
+        if isp:
+            summary += f", isp={isp}"
+        if usage:
+            summary += f", usage={usage}"
         return summary, score / 100.0
 
     if source == "virustotal":
@@ -814,7 +850,7 @@ def _summarize_enrichment(
         if org:
             summary += f", org={org}"
         if vulns:
-            summary += f", {len(vulns)} vuln(s)"
+            summary += f", vuln(s)={','.join(vulns[:5])}"
         return summary, 0.9
 
     if source == "nvd":
@@ -829,6 +865,30 @@ def _summarize_enrichment(
         if in_kev:
             summary += ", IN CISA KEV"
         return summary, 0.95 if score != "N/A" else 0.7
+
+    if source == "otx":
+        pulses = data.get("pulse_count", 0)
+        tags = data.get("tags", [])
+        adversaries = data.get("adversaries", [])
+        families = data.get("malware_families", [])
+        summary = f"OTX: {pulses} pulse(s)"
+        if adversaries:
+            summary += f", adversary={','.join(adversaries[:2])}"
+        elif tags:
+            summary += f", tags={','.join(tags[:4])}"
+        if families:
+            summary += f", malware={','.join(families[:2])}"
+        # Generic high-pulse items (shared infrastructure, automated feeds) score lower.
+        generic_terms = {"auto-generated", "scanner", "masscan", "shodan"}
+        is_generic = any(t in (tags or []) for t in generic_terms)
+        if is_generic:
+            confidence = 0.4
+        elif pulses > 10:
+            # High pulse count often means shared/CDN infrastructure with copy-paste labels.
+            confidence = 0.7
+        else:
+            confidence = min(0.3 + pulses * 0.1, 0.8) if pulses > 0 else 0.2
+        return summary, confidence
 
     return f"{source}: enrichment retrieved for {value}", 0.5
 
@@ -905,7 +965,7 @@ def pivot_case_observables(
     existing_pivots: set[tuple[str, str]] = {
         (ev.metadata.get("pivot_source", ""), ev.metadata.get("source_observable_id", ""))
         for ev in case.evidence
-        if ev.metadata.get("pivot_source")
+        if ev.metadata.get("pivot_source") and ev.status != EvidenceStatus.FAILED
     }
     existing_index: dict[tuple[ObservableType, str], Observable] = {
         (o.observable_type, o.canonical_value or o.value): o

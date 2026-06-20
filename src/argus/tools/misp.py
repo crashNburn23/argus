@@ -9,6 +9,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 
 from argus.config.settings import get_settings
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter
+from argus.tools.http import get_misp_client
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -61,16 +62,13 @@ async def _search(payload: dict[str, Any]) -> dict[str, Any]:
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-    async with httpx.AsyncClient(
-        timeout=30, verify=settings.misp_verify_ssl
-    ) as client:
-        resp = await client.post(
-            f"{settings.misp_url}/attributes/restSearch",
-            json=payload,
-            headers=headers,
-        )
-        resp.raise_for_status()
-        return dict(resp.json())
+    resp = await get_misp_client(settings.misp_verify_ssl).post(
+        f"{settings.misp_url}/attributes/restSearch",
+        json=payload,
+        headers=headers,
+    )
+    resp.raise_for_status()
+    return dict(resp.json())
 
 
 async def misp_search(

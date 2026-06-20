@@ -8,6 +8,7 @@ import httpx
 
 from argus.config.settings import get_settings
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter
+from argus.tools.http import get_client
 
 _CRTSH = "https://crt.sh"
 _VT_BASE = "https://www.virustotal.com/api/v3"
@@ -48,10 +49,9 @@ def get_tool_definition() -> dict[str, Any]:
 
 async def _query_crtsh(domain: str, include_subdomains: bool) -> list[dict[str, Any]]:
     query = f"%.{domain}" if include_subdomains else domain
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(_CRTSH, params={"q": query, "output": "json"})
-        resp.raise_for_status()
-        raw: list[dict[str, Any]] = resp.json()
+    resp = await get_client().get(_CRTSH, params={"q": query, "output": "json"})
+    resp.raise_for_status()
+    raw: list[dict[str, Any]] = resp.json()
 
     seen: set[str] = set()
     certs = []
@@ -87,10 +87,9 @@ async def _query_vt_certs(
         if indicator_type == "ip"
         else f"{_VT_BASE}/domains/{indicator}/historical_ssl_certificates"
     )
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(endpoint, params={"limit": 10}, headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
+    resp = await get_client().get(endpoint, params={"limit": 10}, headers=headers)
+    resp.raise_for_status()
+    data = resp.json()
 
     certs = []
     for item in data.get("data", [])[:10]:
@@ -153,6 +152,7 @@ async def ssl_cert_lookup(
         "cert_count": len(certs),
         "certs": certs[:25],
         "all_sans": sorted(all_sans)[:60],
+        "status": "ok" if certs else ("error" if errors else "no_data"),
     }
     if errors:
         result["errors"] = errors

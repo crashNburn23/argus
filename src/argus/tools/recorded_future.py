@@ -9,6 +9,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 
 from argus.config.settings import get_settings
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter
+from argus.tools.http import get_client
 
 _BASE = "https://api.recordedfuture.com/v2"
 
@@ -70,12 +71,11 @@ async def _fetch(entity: str, rf_type: str) -> dict[str, Any]:
         "Content-Type": "application/json",
     }
     params = {"fields": "risk,intelCard,relatedEntities,threatLists,metrics"}
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(
-            f"{_BASE}/{rf_type}/{entity}", headers=headers, params=params
-        )
-        resp.raise_for_status()
-        return dict(resp.json())
+    resp = await get_client().get(
+        f"{_BASE}/{rf_type}/{entity}", headers=headers, params=params
+    )
+    resp.raise_for_status()
+    return dict(resp.json())
 
 
 async def recorded_future_search(entity: str, entity_type: str) -> str:

@@ -1,0 +1,188 @@
+{
+  "model_provider": "ollama",
+  "model": "phi4-mini:3.8b",
+  "case_count": 8,
+  "average_score": 0.2732142857142857,
+  "duration_seconds": 1622.0216457708739,
+  "minimum_score": 0.0,
+  "passed": true,
+  "results": [
+    {
+      "case_id": "IR-0001",
+      "score": 0.14285714285714285,
+      "decision_match": true,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1566.001",
+        "T1059.001"
+      ],
+      "findings_found": [],
+      "findings_missing": [
+        "malicious attachment",
+        "encoded PowerShell"
+      ],
+      "actions_found": [],
+      "actions_missing": [
+        "Isolate FIN-WS-044",
+        "Reset j.smith credentials"
+      ],
+      "duration_seconds": 160.74873222783208,
+      "report_path": "benchmark-reports/IR-0001.md"
+    },
+    {
+      "case_id": "IR-0002",
+      "score": 0.42857142857142855,
+      "decision_match": true,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1003.001",
+        "T1021.002"
+      ],
+      "findings_found": [
+        "lateral movement"
+      ],
+      "findings_missing": [
+        "LSASS memory"
+      ],
+      "actions_found": [
+        "Isolate ENG-WS-017"
+      ],
+      "actions_missing": [
+        "Disable svc_backup"
+      ],
+      "duration_seconds": 214.4524805380497,
+      "report_path": "benchmark-reports/IR-0002.md"
+    },
+    {
+      "case_id": "IR-0003",
+      "score": 0.5714285714285714,
+      "decision_match": true,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1490",
+        "T1486"
+      ],
+      "findings_found": [
+        "shadow copies",
+        "ransom note"
+      ],
+      "findings_missing": [],
+      "actions_found": [
+        "Isolate FILE-07"
+      ],
+      "actions_missing": [
+        "Activate ransomware response plan"
+      ],
+      "duration_seconds": 271.8753952931147,
+      "report_path": "benchmark-reports/IR-0003.md"
+    },
+    {
+      "case_id": "IR-0004",
+      "score": 0.14285714285714285,
+      "decision_match": false,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1136.003",
+        "T1098.001"
+      ],
+      "findings_found": [
+        "access key"
+      ],
+      "findings_missing": [
+        "privileged cloud user"
+      ],
+      "actions_found": [],
+      "actions_missing": [
+        "Validate the change with ops-admin",
+        "Disable backup-admin pending validation"
+      ],
+      "duration_seconds": 228.84547819406725,
+      "report_path": "benchmark-reports/IR-0004.md"
+    },
+    {
+      "case_id": "IR-0005",
+      "score": 0.0,
+      "decision_match": false,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1046"
+      ],
+      "findings_found": [],
+      "findings_missing": [
+        "approved scanner",
+        "CHG-8842"
+      ],
+      "actions_found": [],
+      "actions_missing": [
+        "Close as authorized activity"
+      ],
+      "duration_seconds": 187.01515580201522,
+      "report_path": "benchmark-reports/IR-0005.md"
+    },
+    {
+      "case_id": "IR-0006",
+      "score": 0.4,
+      "decision_match": false,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1059.001"
+      ],
+      "findings_found": [
+        "approved maintenance",
+        "CHG-9011"
+      ],
+      "findings_missing": [],
+      "actions_found": [],
+      "actions_missing": [
+        "Close as authorized activity"
+      ],
+      "duration_seconds": 189.48478880897164,
+      "report_path": "benchmark-reports/IR-0006.md"
+    },
+    {
+      "case_id": "IR-0007",
+      "score": 0.5,
+      "decision_match": true,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1505.003",
+        "T1105",
+        "T1053.005"
+      ],
+      "findings_found": [
+        "web shell",
+        "scheduled task"
+      ],
+      "findings_missing": [],
+      "actions_found": [
+        "Isolate WEB-03"
+      ],
+      "actions_missing": [
+        "Preserve forensic evidence"
+      ],
+      "duration_seconds": 220.06924063619226,
+      "report_path": "benchmark-reports/IR-0007.md"
+    },
+    {
+      "case_id": "IR-0008",
+      "score": 0.0,
+      "decision_match": false,
+      "techniques_found": [],
+      "techniques_missing": [
+        "T1071.004"
+      ],
+      "findings_found": [],
+      "findings_missing": [
+        "high-entropy DNS queries",
+        "regular cadence"
+      ],
+      "actions_found": [],
+      "actions_missing": [
+        "Collect endpoint telemetry from MKT-WS-028",
+        "Review DNS query payloads"
+      ],
+      "duration_seconds": 149.52705705398694,
+      "report_path": "benchmark-reports/IR-0008.md"
+    }
+  ]
+}

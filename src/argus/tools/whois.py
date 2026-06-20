@@ -5,12 +5,25 @@ import json
 from typing import Any
 
 import httpx
+import tldextract
 
 from argus.config.settings import get_settings
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter
+from argus.tools.http import get_client, get_redirect_client
 
 _RDAP_BASE = "https://rdap.org"
 _VT_BASE = "https://www.virustotal.com/api/v3"
+
+
+def _registered_domain(domain: str) -> str:
+    """Return the registered (apex) domain for any subdomain input.
+
+    RDAP only serves data at the eTLD+1 level — querying a subdomain always 404s.
+    """
+    ext = tldextract.extract(domain)
+    if ext.domain and ext.suffix:
+        return f"{ext.domain}.{ext.suffix}"
+    return domain
 
 
 def get_tool_definition() -> dict[str, Any]:
@@ -36,10 +49,9 @@ def get_tool_definition() -> dict[str, Any]:
 
 
 async def _rdap(domain: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-        resp = await client.get(f"{_RDAP_BASE}/domain/{domain}")
-        resp.raise_for_status()
-        data = resp.json()
+    resp = await get_redirect_client().get(f"{_RDAP_BASE}/domain/{domain}")
+    resp.raise_for_status()
+    data = resp.json()
 
     registrar = ""
     registrant_org = ""
@@ -80,14 +92,13 @@ async def _vt_historical_whois(domain: str, api_key: str) -> list[dict[str, Any]
     await rl.wait_and_acquire()
 
     headers = {"x-apikey": api_key}
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(
-            f"{_VT_BASE}/domains/{domain}/historical_whois",
-            params={"limit": 5},
-            headers=headers,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    resp = await get_client().get(
+        f"{_VT_BASE}/domains/{domain}/historical_whois",
+        params={"limit": 5},
+        headers=headers,
+    )
+    resp.raise_for_status()
+    data = resp.json()
 
     records = []
     for item in data.get("data", [])[:5]:
@@ -105,22 +116,25 @@ async def _vt_historical_whois(domain: str, api_key: str) -> list[dict[str, Any]
 
 
 async def whois_lookup(domain: str) -> str:
-    cache_key = f"whois:{domain}"
+    apex = _registered_domain(domain)
+    cache_key = f"whois:{apex}"
     cached = cache_get(cache_key)
     if cached:
         return json.dumps(cached)
 
-    result: dict[str, Any] = {"domain": domain}
+    result: dict[str, Any] = {"domain": apex}
+    if apex != domain:
+        result["queried_as"] = apex
 
     try:
-        result.update(await _rdap(domain))
+        result.update(await _rdap(apex))
     except Exception as e:
         result["rdap_error"] = str(e)
 
     vt_key = get_settings().api_key("virustotal")
     if vt_key:
         try:
-            historical = await _vt_historical_whois(domain, vt_key)
+            historical = await _vt_historical_whois(apex, vt_key)
             if historical:
                 result["historical_records"] = historical
         except Exception as e:

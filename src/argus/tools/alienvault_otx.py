@@ -9,8 +9,20 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 
 from argus.config.settings import get_settings
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter
+from argus.tools.http import get_client
 
 _BASE = "https://otx.alienvault.com/api/v1/indicators"
+
+def _as_list(val: Any) -> list[Any]:
+    """Normalize OTX fields that may be a list, a single string, or None."""
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return val
+    if isinstance(val, str):
+        return [val] if val else []
+    return [val]
+
 
 _OTX_TYPE_MAP = {
     "ip": "IPv4",
@@ -63,10 +75,9 @@ async def _fetch(indicator: str, otx_type: str, section: str) -> dict[str, Any]:
     settings = get_settings()
     headers = {"X-OTX-API-KEY": settings.api_key("otx")}
     url = f"{_BASE}/{otx_type}/{indicator}/{section}"
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(url, headers=headers)
-        resp.raise_for_status()
-        return dict(resp.json())
+    resp = await get_client().get(url, headers=headers)
+    resp.raise_for_status()
+    return dict(resp.json())
 
 
 async def otx_lookup(indicator: str, indicator_type: str) -> str:
@@ -85,19 +96,16 @@ async def otx_lookup(indicator: str, indicator_type: str) -> str:
             "indicator_type": indicator_type,
             "pulse_count": pulses.get("count", 0),
             "malware_families": list({
-                tag
-                for p in pulses.get("pulses", [])
-                for tag in p.get("malware_families", [])
+                str(f) for p in pulses.get("pulses", [])
+                for f in _as_list(p.get("malware_families")) if f and not isinstance(f, dict)
             })[:20],
             "tags": list({
-                tag
-                for p in pulses.get("pulses", [])
-                for tag in p.get("tags", [])
+                str(t) for p in pulses.get("pulses", [])
+                for t in _as_list(p.get("tags")) if t and not isinstance(t, dict)
             })[:20],
             "adversaries": list({
-                adv
-                for p in pulses.get("pulses", [])
-                for adv in p.get("adversary", []) if adv
+                str(adv) for p in pulses.get("pulses", [])
+                for adv in _as_list(p.get("adversary")) if adv and not isinstance(adv, dict)
             })[:10],
             "recent_pulses": [
                 {
@@ -111,8 +119,8 @@ async def otx_lookup(indicator: str, indicator_type: str) -> str:
             "country_code": general.get("country_code", ""),
             "asn": general.get("asn", ""),
         }
+        cache_set(cache_key, result, ttl=3600)
+        return json.dumps(result)
     except Exception as e:
-        result = {"error": str(e), "indicator": indicator}
-
-    cache_set(cache_key, result, ttl=3600)
-    return json.dumps(result)
+        # Do not cache errors — let the caller retry on next request.
+        return json.dumps({"error": str(e), "indicator": indicator})

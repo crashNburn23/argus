@@ -128,6 +128,27 @@ Session
   /status                    Session info and active case
   /clear                     Fresh conversation
   /help                      This list
+
+Other
+  /serve                     Open the web UI in a browser
+```
+
+## Web UI
+
+```bash
+argus serve              # start at http://127.0.0.1:8000
+argus serve --port 9000
+argus serve --reload     # auto-reload on code changes
+```
+
+React + Tailwind frontend served by a FastAPI backend. Pages: Chat, Cases, IOC Graph,
+Tools, Settings. The IOC Graph page renders enrichment pivot results as a force-directed
+network diagram.
+
+Build the frontend once before first run:
+
+```bash
+cd webui && npm install && npm run build
 ```
 
 ## One-shot commands
@@ -185,15 +206,30 @@ Analysis layer (LLM)
 
 Orchestrator (interactive / one-shot queries)
   CTIOrchestrator
-    ├── ThreatActorAgent   → MITRE ATT&CK, OTX, Recorded Future, web
-    ├── VulnIntelAgent     → NVD, CISA KEV, Shodan
-    ├── TriageAgent        → VT, AbuseIPDB, OTX, MITRE ATT&CK
-    └── siem_query         → Splunk or configured SIEM backend
+    ├── url_fetch           → fetch + clean text of a URL (HTML stripper, IOC pre-extract)
+    ├── ThreatActorAgent    → MITRE ATT&CK, OTX, Recorded Future, web
+    ├── VulnIntelAgent      → NVD, CISA KEV, Shodan
+    ├── TriageAgent         → VT, AbuseIPDB, OTX, MITRE ATT&CK
+    ├── CaseAnalysisAgent   → IOC enrichment + mandatory infrastructure pivoting
+    └── siem_query          → Splunk or configured SIEM backend
 ```
 
 Each agent runs its own model tool-use loop, returns a typed Pydantic result, and stores
-a run record. The orchestrator includes a completion-verification pass that identifies
-retriable vs permanent gaps before returning.
+a run record. The orchestrator fetches URLs before dispatching sub-agents, then uses
+CaseAnalysisAgent to enrich any IOCs found. A verification pass identifies retriable vs
+permanent gaps before returning.
+
+## Docker (Splunk dev environment)
+
+A `docker-compose.yml` for Splunk with the BOTS v3 dataset is in `docker/splunk/`. Useful
+for testing SIEM queries without a production Splunk instance.
+
+```bash
+cd docker/splunk
+docker compose up -d
+```
+
+Splunk web at http://localhost:8000, HEC at http://localhost:8088.
 
 ## Development
 

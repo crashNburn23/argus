@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class MITRETechnique(BaseModel):
@@ -14,10 +14,20 @@ class MITRETechnique(BaseModel):
     detection_guidance: str = ""
     data_sources: list[str] = []
 
+    @field_validator("description", "detection_guidance", mode="before")
+    @classmethod
+    def _coerce_none_str(cls, v: Any) -> str:
+        return "" if v is None else str(v)
+
 
 class Campaign(BaseModel):
     name: str
     description: str = ""
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _coerce_none_str(cls, v: Any) -> str:
+        return "" if v is None else str(v)
 
 
 class DetectionRecommendation(BaseModel):
@@ -31,6 +41,11 @@ class DetectionRecommendation(BaseModel):
         if isinstance(v, str):
             return {"description": v}
         return v
+
+    @field_validator("technique_id", "name", "description", mode="before")
+    @classmethod
+    def _coerce_none_str(cls, v: Any) -> str:
+        return "" if v is None else str(v)
 
 
 class ThreatActor(BaseModel):
@@ -52,6 +67,11 @@ class ThreatActor(BaseModel):
     last_seen: datetime | None = None
     source_urls: list[str] = []
 
+    @field_validator("description", "sophistication", "resource_level", "primary_motivation", mode="before")
+    @classmethod
+    def _coerce_none_str(cls, v: Any) -> str:
+        return "" if v is None else str(v)
+
 
 class ThreatActorResearchResult(BaseModel):
     actors: list[ThreatActor]
@@ -59,3 +79,8 @@ class ThreatActorResearchResult(BaseModel):
     key_findings: list[str] = []
     recommended_detections: list[DetectionRecommendation] = []
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @field_validator("summary", mode="before")
+    @classmethod
+    def _coerce_none_str(cls, v: Any) -> str:
+        return "" if v is None else str(v)

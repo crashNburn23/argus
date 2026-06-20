@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 
 from argus.agents.base import BaseAgent
 from argus.models.report import CTIReport, Recommendation
@@ -22,6 +22,62 @@ class _ReportNarrative(BaseModel):
     confidence_assessment: str = ""
     recommendations: list[Recommendation] = []
     references: list[str] = []
+
+    @model_validator(mode="before")
+    @classmethod
+    def _unwrap_recommendations(cls, data: Any) -> Any:
+        """Coerce recommendations to list[Recommendation] when model returns a dict."""
+        if not isinstance(data, dict):
+            return data
+        recs = data.get("recommendations")
+        if not isinstance(recs, dict):
+            return data
+        # Case 1: wrapper dict with a list value — {"recommended_actions": [...]}
+        for val in recs.values():
+            if isinstance(val, list):
+                return {**data, "recommendations": val}
+        # Case 2: flat dict of priority→action strings — {"high": "Isolate...", ...}
+        result = [
+            {"priority": str(k), "action": str(v) if isinstance(v, str) else str(v), "rationale": ""}
+            for k, v in recs.items()
+        ]
+        return {**data, "recommendations": result}
+
+    @field_validator(
+        "introduction", "executive_summary", "analyst_assessment",
+        "ttp_analysis", "threat_landscape", "confidence_assessment",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_narrative_str(cls, v: Any) -> str:
+        if v is None:
+            return ""
+        if isinstance(v, dict):
+            return " ".join(str(val) for val in v.values() if val)
+        if isinstance(v, list):
+            parts = []
+            for item in v:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    parts.append(" ".join(str(val) for val in item.values() if val))
+            return " ".join(parts)
+        return str(v)
+
+    @field_validator("key_findings", "threat_actor_profiles", "campaign_correlations", "references", mode="before")
+    @classmethod
+    def _coerce_str_list(cls, v: Any) -> list[str]:
+        if not isinstance(v, list):
+            return []
+        result = []
+        for item in v:
+            if isinstance(item, str):
+                result.append(item)
+            elif isinstance(item, dict):
+                result.append(" ".join(str(val) for val in item.values() if val))
+            else:
+                result.append(str(item))
+        return result
 
 
 _SYSTEM = """\

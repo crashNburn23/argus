@@ -52,10 +52,18 @@ class LLMClient(Protocol):
 
 class AnthropicClient:
     def __init__(self, api_key: str) -> None:
-        self._client = anthropic.Anthropic(api_key=api_key)
+        # 30-minute total timeout. Streaming prevents idle LB drops; this caps total inference
+        # time for large report prompts (~6KB expected, 8KB worst-case with full evidence load).
+        self._client = anthropic.Anthropic(
+            api_key=api_key,
+            timeout=httpx.Timeout(timeout=1800.0, connect=10.0, read=1800.0),
+        )
 
     def create_message(self, **kwargs: Any) -> LLMResponse:
-        response = self._client.messages.create(**kwargs)
+        # Use streaming to prevent load-balancer 300s idle TCP drops.
+        # Tokens flow immediately — no silent idle period for the LB to kill.
+        with self._client.messages.stream(**kwargs) as stream:
+            response = stream.get_final_message()
         return LLMResponse(
             content=response.content,
             stop_reason=response.stop_reason or "",

@@ -70,6 +70,16 @@ class CaseNote(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class CaseReference(BaseModel):
+    ref_id: str = Field(default_factory=lambda: f"ref_{uuid4().hex}")
+    url: str
+    title: str = ""
+    added_by: str = "analyst"
+    added_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    needs_review: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ReportArtifact(BaseModel):
     report_id: str = Field(default_factory=lambda: f"rep_{uuid4().hex}")
     report_type: str
@@ -99,6 +109,7 @@ class Case(BaseModel):
     pirs: list[PIR] = Field(default_factory=list)
     collection_tasks: list[CollectionTask] = Field(default_factory=list)
     notes: list[CaseNote] = Field(default_factory=list)
+    references: list[CaseReference] = Field(default_factory=list)
     reports: list[ReportArtifact] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)

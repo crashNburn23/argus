@@ -23,6 +23,7 @@ from argus.cli.commands import (
     model,
     query,
     research,
+    serve,
     triage,
     vuln,
 )
@@ -156,6 +157,7 @@ app.add_typer(triage.app, name="triage", help="Triage security alerts")
 app.add_typer(case.app, name="case", help="Manage CTI cases (create, enrich, pivot, analyze)")
 app.add_typer(query.app, name="query", help="Natural language queries via orchestrator")
 app.add_typer(benchmark.app, name="benchmark", help="Incident response report benchmarks")
+app.add_typer(serve.app, name="serve", help="Start the Argus web UI server")
 app.command("model")(model.model_command)
 app.command("doctor")(doctor.doctor_command)
 app.command("ask")(query.ask)

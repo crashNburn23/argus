@@ -25,8 +25,24 @@ Core rules:
 - Distinguish confirmed intelligence from analytical assessment.
 - Evidence items with status FAILED represent collection attempts that returned errors,
   not confirmed absences. Do not treat a failed enrichment as proof that no data exists.
+- Evidence items are authoritative. Analyst Notes are written at a point in time and
+  may be outdated by subsequent collection. When a Note says "no data found" or
+  "no records" for an observable but an Evidence item shows findings for that same
+  observable, the Evidence item is correct — cite it and disregard the stale note text.
+- Every factual claim MUST be followed by the evidence ID in brackets. Correct format:
+    "IP 94.154.32.160 served approachsimply.net [ev_2b3c4d5e]."
+    "The registrar was HOSTINGER, created 2025-11-05 [ev_229cf460]."
+  Writing a fact with no [ev_...] citation is a critical grounding failure.
+  A downstream ReviewAgent will reject any uncited claim.
+- Do NOT fabricate URLs, article titles, news references, or external citations.
+  Only cite evidence provided in this prompt. Do not draw on training-data knowledge
+  of threat actors, CVEs, or incidents — use only what is in the Evidence section.
+- The Evidence section below is the authoritative intelligence record for this case.
+  Read it carefully and cite each [ev_...] ID. Do not summarize what you expect to find
+  — report what the evidence actually shows.
 
 Return your report as plain Markdown with appropriate headers.
+All output must be written in English regardless of the language of any source material.
 """
 
 _AUDIENCE_INSTRUCTIONS: dict[str, str] = {
@@ -131,11 +147,15 @@ def _compile_case_prompt(case: Case) -> str:
             if pir.answer:
                 lines.append(f"  Answer: {pir.answer}")
 
+    # Context sections first (short, background framing)
     if case.observables:
         lines.append("\n## Observables")
         from collections import defaultdict
+        # Only include manually-added observables — pivot-discovered ones are in Evidence.
+        manually_added = [o for o in case.observables if "manually_added" in o.labels]
+        pivot_count = sum(1 for o in case.observables if "manually_added" not in o.labels)
         by_type: dict[str, list[str]] = defaultdict(list)
-        for obs in case.observables:
+        for obs in manually_added:
             val = obs.canonical_value or obs.value
             conf = f" ({obs.confidence:.0%})" if obs.confidence else ""
             labels = f" [{', '.join(obs.labels)}]" if obs.labels else ""
@@ -143,23 +163,100 @@ def _compile_case_prompt(case: Case) -> str:
         for obs_type, entries in sorted(by_type.items()):
             lines.append(f"\n### {obs_type.upper()}")
             lines.extend(entries)
+        if pivot_count:
+            lines.append(f"_(+ {pivot_count} pivot-discovered observables covered in Evidence)_")
+
+    if case.notes:
+        lines.append("\n## Analyst Notes")
+        # Newest first so the most recent findings are closest to the evidence boundary.
+        # Cap each note at 150 chars; show up to 4 notes total (~600 char budget).
+        shown = 0
+        for note in reversed(case.notes):
+            if shown >= 4:
+                break
+            body = note.body[:150]
+            if not body:
+                continue
+            lines.append(f"- {note.author}: {body}{'…' if len(note.body) > 150 else ''}")
+            shown += 1
+
+    if case.relationships:
+        shown_rels = case.relationships[:15]
+        lines.append("\n## Relationships")
+        if len(case.relationships) > 15:
+            lines.append(f"_(Showing 15 of {len(case.relationships)} relationships)_")
+        for rel in shown_rels:
+            rationale = f" — {rel.rationale}" if rel.rationale else ""
+            lines.append(
+                f"- `{rel.source_ref}` —[{rel.relationship_type.value}]→ "
+                f"`{rel.target_ref}`{rationale}"
+            )
 
     confirmed_all = [ev for ev in case.evidence if ev.status != EvidenceStatus.FAILED]
     failed = [ev for ev in case.evidence if ev.status == EvidenceStatus.FAILED]
 
-    # Prioritize high-confidence confirmed evidence; cap to avoid oversized prompts.
-    # Sort: CONFIRMED before INFERRED, then by confidence descending.
+    # Sort: CONFIRMED before INFERRED, then by priority score, then by confidence descending.
+    # Priority score boosts items with high-value keywords that analysts care most about.
     _STATUS_ORDER = {EvidenceStatus.CONFIRMED: 0, EvidenceStatus.INFERRED: 1}
-    confirmed_all.sort(key=lambda e: (_STATUS_ORDER.get(e.status, 2), -(e.confidence or 0.0)))
-    confirmed = confirmed_all[:150]
-    truncated = len(confirmed_all) - len(confirmed)
+    _HIGH_VALUE_KEYWORDS = {
+        "cisa kev", "weaponized", "c2,", ",c2", "c2 ", " c2", "redline", "asyncrat",
+        "cobalt strike", "mimikatz", "stealer", "infostealer", "ransomware",
+        "unc6395", "malware=",
+    }
+    _GENERIC_KEYWORDS = {"auto-generated", "scanner", "masscan"}
 
+    def _priority(ev: Any) -> int:
+        s = (ev.summary or "").lower()
+        if any(kw in s for kw in _HIGH_VALUE_KEYWORDS):
+            return 2
+        if any(kw in s for kw in _GENERIC_KEYWORDS):
+            return 0  # de-prioritize automated/generic feed items
+        return 1
+
+    confirmed_all.sort(key=lambda e: (
+        _STATUS_ORDER.get(e.status, 2),
+        -_priority(e),
+        -(e.confidence or 0.0),
+    ))
+
+    # Filter zero-value items (no certs found, no resolutions) — they add noise without intel.
+    def _has_value(ev: Any) -> bool:
+        s = ev.summary or ""
+        return "0 cert(s)" not in s and "0 resolution(s)" not in s
+
+    confirmed_valuable = [ev for ev in confirmed_all if _has_value(ev)]
+    # Cap: top 20 valuable items; note how many total were omitted.
+    confirmed = confirmed_valuable[:20]
+    omitted_evidence = len(confirmed_all) - len(confirmed)
+
+    # Exclude failures where the same (source, observable) pair has a confirmed record —
+    # those are stale pre-fix failures superseded by a successful re-enrichment.
+    confirmed_pairs = {
+        (ev.source_name, oid)
+        for ev in confirmed_all
+        for oid in ev.observable_ids
+    }
+    meaningful_failed = [
+        ev for ev in failed
+        if not any((ev.source_name, oid) in confirmed_pairs for oid in ev.observable_ids)
+    ]
+
+    if meaningful_failed:
+        shown_failed = meaningful_failed[:10]
+        lines.append("\n## Collection Failures (not suitable for claims)")
+        if len(meaningful_failed) > 10:
+            lines.append(f"_(Showing 10 of {len(meaningful_failed)} failures — rest omitted for brevity)_")
+        for ev in shown_failed:
+            src = ev.source_name or ev.source_type
+            lines.append(f"- _{src}_: {(ev.summary or '')[:80]}")
+
+    # Evidence LAST — closest to the generation boundary so the model attends to it fully.
     if confirmed:
         lines.append("\n## Evidence")
-        if truncated:
+        if omitted_evidence:
             lines.append(
-                f"_(Showing {len(confirmed)} of {len(confirmed_all)} items, "
-                f"highest confidence first. {truncated} lower-confidence items omitted.)_"
+                f"_(Showing {len(confirmed)} of {len(confirmed_all)} items — "
+                f"highest confidence first; {omitted_evidence} lower-value items omitted.)_"
             )
         for ev in confirmed:
             src = ev.source_name or ev.source_type
@@ -169,26 +266,6 @@ def _compile_case_prompt(case: Case) -> str:
             if ev.raw_excerpt and len(ev.raw_excerpt) < 300:
                 lines.append(f"  Excerpt: {ev.raw_excerpt[:250]}")
 
-    if failed:
-        lines.append("\n## Collection Failures (not suitable for claims)")
-        for ev in failed:
-            src = ev.source_name or ev.source_type
-            lines.append(f"- _{src}_: {ev.summary}")
-
-    if case.relationships:
-        lines.append("\n## Relationships")
-        for rel in case.relationships:
-            rationale = f" — {rel.rationale}" if rel.rationale else ""
-            lines.append(
-                f"- `{rel.source_ref}` —[{rel.relationship_type.value}]→ "
-                f"`{rel.target_ref}`{rationale}"
-            )
-
-    if case.notes:
-        lines.append("\n## Analyst Notes")
-        for note in case.notes:
-            lines.append(f"- {note.author}: {note.body}")
-
     return "\n".join(lines)
 
 
@@ -197,6 +274,7 @@ class CaseReportAgent(BaseAgent):
 
     AUDIENCES = list(_AUDIENCE_INSTRUCTIONS)
     name = "case_report"
+    max_output_tokens = 4096  # Reports are concise; this halves output quota vs. default 8192.
 
     def __init__(self, audience: str = "cti", progress: ProgressCallback | None = None) -> None:
         super().__init__(progress=progress)
