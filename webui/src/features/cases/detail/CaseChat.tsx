@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useQueryClient } from '@tanstack/react-query'
 import Button from '../../../components/ui/Button'
 import Textarea from '../../../components/ui/Textarea'
+import { caseDetailKey } from './queries'
 import type { ChatMessage } from './types'
 
 function loadMessages(storageKey: string): ChatMessage[] {
   try {
     const raw = localStorage.getItem(storageKey)
-    return raw ? JSON.parse(raw) as ChatMessage[] : []
+    return raw ? (JSON.parse(raw) as ChatMessage[]) : []
   } catch {
     return []
   }
 }
 
-export default function CaseChat({ caseId, onCaseChanged }: { caseId: string; onCaseChanged: () => void }) {
+export default function CaseChat({ caseId }: { caseId: string }) {
+  const queryClient = useQueryClient()
   const storageKey = `argus-chat-case-${caseId}`
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages(storageKey))
   const [input, setInput] = useState('')
@@ -27,7 +30,7 @@ export default function CaseChat({ caseId, onCaseChanged }: { caseId: string; on
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(messages.filter(message => !message.streaming)))
+    localStorage.setItem(storageKey, JSON.stringify(messages.filter(m => !m.streaming)))
   }, [messages, storageKey])
 
   const connect = useCallback(() => {
@@ -42,26 +45,32 @@ export default function CaseChat({ caseId, onCaseChanged }: { caseId: string; on
       if (mountedRef.current) reconnectTimerRef.current = window.setTimeout(connect, 3_000)
     }
     socket.onmessage = (event: MessageEvent) => {
-      const message = JSON.parse(event.data as string) as { type: string; text: string }
-      if (message.type === 'progress') {
-        progressRef.current += message.text
-        setMessages(previous => {
-          const last = previous[previous.length - 1]
+      const msg = JSON.parse(event.data as string) as { type: string; text: string }
+      if (msg.type === 'progress') {
+        progressRef.current += msg.text
+        setMessages(prev => {
+          const last = prev[prev.length - 1]
           const streaming = { role: 'assistant' as const, content: progressRef.current, streaming: true }
-          return last?.streaming ? [...previous.slice(0, -1), streaming] : [...previous, streaming]
+          return last?.streaming ? [...prev.slice(0, -1), streaming] : [...prev, streaming]
         })
-      } else if (message.type === 'result') {
+      } else if (msg.type === 'result') {
         progressRef.current = ''
-        setMessages(previous => [...previous.filter(item => !item.streaming), { role: 'assistant', content: message.text }])
+        setMessages(prev => [
+          ...prev.filter(m => !m.streaming),
+          { role: 'assistant', content: msg.text },
+        ])
         setRunning(false)
-        onCaseChanged()
-      } else if (message.type === 'error' || message.type === 'cancelled') {
+        void queryClient.invalidateQueries({ queryKey: caseDetailKey(caseId) })
+      } else if (msg.type === 'error' || msg.type === 'cancelled') {
         progressRef.current = ''
-        setMessages(previous => [...previous.filter(item => !item.streaming), { role: 'system', content: message.text }])
+        setMessages(prev => [
+          ...prev.filter(m => !m.streaming),
+          { role: 'system', content: msg.text },
+        ])
         setRunning(false)
       }
     }
-  }, [onCaseChanged])
+  }, [caseId, queryClient])
 
   useEffect(() => {
     mountedRef.current = true
@@ -73,12 +82,14 @@ export default function CaseChat({ caseId, onCaseChanged }: { caseId: string; on
     }
   }, [connect])
 
-  useEffect(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages])
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
   const send = () => {
     const text = input.trim()
     if (!text || !connected || running) return
-    setMessages(previous => [...previous, { role: 'user', content: text }])
+    setMessages(prev => [...prev, { role: 'user', content: text }])
     setInput('')
     setRunning(true)
     progressRef.current = ''
@@ -88,23 +99,38 @@ export default function CaseChat({ caseId, onCaseChanged }: { caseId: string; on
   return (
     <div className="flex h-full flex-col bg-background">
       <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
-        {messages.length === 0 && <p className="mt-12 text-center text-sm text-muted-foreground">Ask Argus about this case. Responses are automatically saved as notes.</p>}
+        {messages.length === 0 && (
+          <p className="mt-12 text-center text-sm text-muted-foreground">
+            Ask Argus about this case. Responses are automatically saved as notes.
+          </p>
+        )}
         {messages.map((message, index) => (
           <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-3xl rounded-xl px-4 py-3 text-sm ${
-              message.role === 'user' ? 'bg-accent text-accent-foreground'
-                : message.role === 'system' ? 'border border-border bg-muted text-muted-foreground italic'
-                  : 'border border-border bg-surface text-foreground'
-            }`}>
-              {message.role === 'user' ? <span className="whitespace-pre-wrap">{message.content}</span> : (
-                <div className="prose prose-invert prose-sm max-w-none"><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown></div>
+            <div
+              className={`max-w-3xl rounded-xl px-4 py-3 text-sm ${
+                message.role === 'user'
+                  ? 'bg-accent text-accent-foreground'
+                  : message.role === 'system'
+                    ? 'border border-border bg-muted text-muted-foreground italic'
+                    : 'border border-border bg-surface text-foreground'
+              }`}
+            >
+              {message.role === 'user' ? (
+                <span className="whitespace-pre-wrap">{message.content}</span>
+              ) : (
+                <div className="prose prose-invert prose-sm max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                </div>
               )}
-              {message.streaming && <span className="ml-1 animate-pulse text-muted-foreground">▋</span>}
+              {message.streaming && (
+                <span className="ml-1 animate-pulse text-muted-foreground">▋</span>
+              )}
             </div>
           </div>
         ))}
         <div ref={bottomRef} />
       </div>
+
       <div className="shrink-0 border-t border-border bg-surface p-4">
         <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
           <span className={`size-2 rounded-full ${connected ? 'bg-success' : 'bg-danger'}`} />
@@ -115,14 +141,28 @@ export default function CaseChat({ caseId, onCaseChanged }: { caseId: string; on
             className="min-h-[4.25rem] flex-1 resize-none"
             rows={2}
             value={input}
-            onChange={event => setInput(event.target.value)}
-            onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send() } }}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                send()
+              }
+            }}
             placeholder="Ask about this case…"
             disabled={!connected}
           />
-          {running
-            ? <Button variant="danger" onClick={() => wsRef.current?.send(JSON.stringify({ type: 'cancel' }))}>Stop</Button>
-            : <Button onClick={send} disabled={!connected || !input.trim()}>Send</Button>}
+          {running ? (
+            <Button
+              variant="danger"
+              onClick={() => wsRef.current?.send(JSON.stringify({ type: 'cancel' }))}
+            >
+              Stop
+            </Button>
+          ) : (
+            <Button onClick={send} disabled={!connected || !input.trim()}>
+              Send
+            </Button>
+          )}
         </div>
       </div>
     </div>

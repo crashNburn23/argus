@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useCallback } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import ErrorState from '../components/ErrorState'
@@ -10,20 +10,16 @@ import CaseReferences from '../features/cases/detail/CaseReferences'
 import CaseReports from '../features/cases/detail/CaseReports'
 import ReviewScopeDialog from '../features/cases/detail/ReviewScopeDialog'
 import CaseWorkspaceHeader from '../features/cases/detail/CaseWorkspaceHeader'
-import { caseDetailApi } from '../features/cases/detail/api'
-import { useCaseDetail } from '../features/cases/detail/queries'
+import { useCaseDetail, useUpdateCase, useReviewCase } from '../features/cases/detail/queries'
 import type { CaseTabId as TabId } from '../features/cases/detail/types'
 
 const IocGraph = lazy(() => import('../features/cases/graph/CaseGraph'))
 
-// ── Constants ──────────────────────────────────────────────────────────────────
-
-// ── Component ──────────────────────────────────────────────────────────────────
-
 export default function CaseDetail() {
   const { id } = useParams<{ id: string }>()
   const { data: caseData, isPending: loading, isError, refetch } = useCaseDetail(id)
-  const loadCase = useCallback(() => { void refetch() }, [refetch])
+  const updateCase = useUpdateCase(id ?? '')
+  const reviewCase = useReviewCase(id ?? '')
   const [activeTab, setActiveTab] = useState<TabId>('overview')
 
   // Review modal state
@@ -34,57 +30,57 @@ export default function CaseDetail() {
   const [reviewing, setReviewing] = useState(false)
   const [reviewError, setReviewError] = useState('')
 
-  // ── Review modal init ─────────────────────────────────────────────────────────
-
   const openReviewModal = () => {
     if (!caseData) return
-    const obsIds = new Set(
-      caseData.observables.filter(o => o.labels.includes('manually_added')).map(o => o.observable_id)
+    setSelectedObsIds(
+      new Set(
+        caseData.observables
+          .filter(o => o.labels.includes('manually_added'))
+          .map(o => o.observable_id),
+      ),
     )
-    const noteIds = new Set(
-      caseData.notes.filter(n => n.metadata?.source === 'manual').map(n => n.note_id)
+    setSelectedNoteIds(
+      new Set(
+        caseData.notes.filter(n => n.metadata?.source === 'manual').map(n => n.note_id),
+      ),
     )
-    const refIds = new Set(
-      (caseData.references ?? []).filter(r => r.needs_review).map(r => r.ref_id)
+    setSelectedRefIds(
+      new Set((caseData.references ?? []).filter(r => r.needs_review).map(r => r.ref_id)),
     )
-    setSelectedObsIds(obsIds)
-    setSelectedNoteIds(noteIds)
-    setSelectedRefIds(refIds)
     setReviewError('')
     setShowReviewModal(true)
   }
 
-  // ── Actions ───────────────────────────────────────────────────────────────────
-
-  const updateStatus = (status: string) => {
-    if (!id) return
-    void caseDetailApi.update(id, { status }).then(loadCase)
-  }
-
   const confirmReview = async () => {
-    if (!id) return
-    setShowReviewModal(false)  // close immediately — analysis runs in background
+    setShowReviewModal(false)
     setReviewing(true)
     setReviewError('')
     try {
-      await caseDetailApi.review(id, {
-          observable_ids: [...selectedObsIds],
-          note_ids: [...selectedNoteIds],
-          reference_ids: [...selectedRefIds],
+      await reviewCase.mutateAsync({
+        observable_ids: [...selectedObsIds],
+        note_ids: [...selectedNoteIds],
+        reference_ids: [...selectedRefIds],
       })
       setActiveTab('notes')
-      loadCase()
     } catch (error) {
-      setReviewError(error instanceof ApiError ? error.message : 'Network error — review may have timed out')
+      setReviewError(
+        error instanceof ApiError ? error.message : 'Network error — review may have timed out',
+      )
     } finally {
       setReviewing(false)
     }
   }
 
-  // ── Render helpers ────────────────────────────────────────────────────────────
-
   if (loading) return <LoadingState label="Loading case workspace" />
-  if (isError || !caseData) return <div className="p-6"><ErrorState title="Case unavailable" message="Argus could not load this case." onRetry={() => void refetch()} /></div>
+  if (isError || !caseData) return (
+    <div className="p-6">
+      <ErrorState
+        title="Case unavailable"
+        message="Argus could not load this case."
+        onRetry={() => void refetch()}
+      />
+    </div>
+  )
 
   const manualObs = caseData.observables.filter(o => o.labels.includes('manually_added'))
   const manualNotes = caseData.notes.filter(n => n.metadata?.source === 'manual')
@@ -93,8 +89,7 @@ export default function CaseDetail() {
   const reviewableCount = manualObs.length + manualNotes.length + pendingRefCount
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-
+    <div className="flex h-full flex-col overflow-hidden">
       {showReviewModal && (
         <ReviewScopeDialog
           observables={manualObs}
@@ -111,17 +106,24 @@ export default function CaseDetail() {
         />
       )}
 
-      {/* ── Review status banner ── */}
       {reviewing && (
-        <div className="flex-none px-6 py-2 bg-emerald-950 border-b border-emerald-800 flex items-center gap-3">
-          <span className="animate-spin inline-block w-3.5 h-3.5 border border-emerald-400 border-t-transparent rounded-full flex-none" />
-          <span className="text-sm text-emerald-300">Argus is analyzing — results will appear in Notes when complete.</span>
+        <div className="flex flex-none items-center gap-3 border-b border-success/20 bg-success/10 px-6 py-2">
+          <span className="inline-block size-3.5 flex-none animate-spin rounded-full border border-success border-t-transparent" />
+          <span className="text-sm text-success">
+            Argus is analyzing — results will appear in Notes when complete.
+          </span>
         </div>
       )}
       {reviewError && !reviewing && (
-        <div className="flex-none px-6 py-2 bg-red-950 border-b border-red-800 flex items-center justify-between gap-3">
-          <span className="text-sm text-red-300">{reviewError}</span>
-          <button onClick={() => setReviewError('')} className="text-red-400 hover:text-red-200 text-xs flex-none">Dismiss</button>
+        <div className="flex flex-none items-center justify-between gap-3 border-b border-danger/20 bg-danger/10 px-6 py-2">
+          <span className="text-sm text-danger">{reviewError}</span>
+          <button
+            type="button"
+            onClick={() => setReviewError('')}
+            className="flex-none text-xs text-danger/70 hover:text-danger"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -132,18 +134,12 @@ export default function CaseDetail() {
         reviewableCount={reviewableCount}
         onTabChange={setActiveTab}
         onReview={openReviewModal}
-        onStatusChange={updateStatus}
+        onStatusChange={status => updateCase.mutate({ status })}
       />
 
-      {/* ── Tab content ── */}
       <div className="flex-1 overflow-hidden">
+        {activeTab === 'overview' && <CaseOverview caseData={caseData} />}
 
-        {/* OVERVIEW */}
-        {activeTab === 'overview' && (
-          <CaseOverview caseData={caseData} onCaseChanged={loadCase} />
-        )}
-
-        {/* GRAPH */}
         {activeTab === 'graph' && id && (
           <div className="h-full">
             <Suspense fallback={<LoadingState label="Loading graph workspace" />}>
@@ -152,22 +148,15 @@ export default function CaseDetail() {
           </div>
         )}
 
-        {/* CHAT */}
-        {activeTab === 'chat' && (
-          id && <CaseChat caseId={id} onCaseChanged={loadCase} />
+        {activeTab === 'chat' && id && <CaseChat caseId={id} />}
+
+        {activeTab === 'notes' && id && <CaseNotes caseId={id} notes={caseData.notes} />}
+
+        {activeTab === 'references' && id && (
+          <CaseReferences caseId={id} references={caseData.references} />
         )}
 
-        {/* NOTES */}
-        {activeTab === 'notes' && id && (
-          <CaseNotes caseId={id} notes={caseData.notes} onCaseChanged={loadCase} />
-        )}
-
-        {/* REFERENCES */}
-        {activeTab === 'references' && id && <CaseReferences caseId={id} references={caseData.references} onCaseChanged={loadCase} />}
-
-        {/* REPORT */}
-        {activeTab === 'report' && id && <CaseReports caseId={id} reports={caseData.reports} onCaseChanged={loadCase} />}
-
+        {activeTab === 'report' && id && <CaseReports caseId={id} reports={caseData.reports} />}
       </div>
     </div>
   )

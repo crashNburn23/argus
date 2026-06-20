@@ -4,12 +4,29 @@ export default {
   theme: {
     extend: {
       colors: {
-        argus: {
-          bg: '#09090b',
-          panel: '#18181b',
-          card: '#1c1c1f',
-          border: '#27272a',
-          'border-light': '#3f3f46',
+        background: 'rgb(var(--color-background) / <alpha-value>)',
+        foreground: 'rgb(var(--color-foreground) / <alpha-value>)',
+        surface: 'rgb(var(--color-surface) / <alpha-value>)',
+        'surface-raised': 'rgb(var(--color-surface-raised) / <alpha-value>)',
+        border: 'rgb(var(--color-border) / <alpha-value>)',
+        muted: {
+          DEFAULT: 'rgb(var(--color-muted) / <alpha-value>)',
+          foreground: 'rgb(var(--color-muted-foreground) / <alpha-value>)',
+        },
+        accent: {
+          DEFAULT: 'rgb(var(--color-accent) / <alpha-value>)',
+          foreground: 'rgb(var(--color-accent-foreground) / <alpha-value>)',
+        },
+        danger: 'rgb(var(--color-danger) / <alpha-value>)',
+        success: 'rgb(var(--color-success) / <alpha-value>)',
+        warning: 'rgb(var(--color-warning) / <alpha-value>)',
+        sidebar: {
+          DEFAULT: 'rgb(var(--color-sidebar) / <alpha-value>)',
+          foreground: 'rgb(var(--color-sidebar-foreground) / <alpha-value>)',
+          border: 'rgb(var(--color-sidebar-border) / <alpha-value>)',
+          hover: 'rgb(var(--color-sidebar-hover) / <alpha-value>)',
+          active: 'rgb(var(--color-sidebar-active) / <alpha-value>)',
+          'active-foreground': 'rgb(var(--color-sidebar-active-foreground) / <alpha-value>)',
         },
       },
       fontFamily: {

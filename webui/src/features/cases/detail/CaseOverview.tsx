@@ -3,7 +3,7 @@ import { Plus } from 'lucide-react'
 import Button from '../../../components/ui/Button'
 import Textarea from '../../../components/ui/Textarea'
 import { cn } from '../../../lib/cn'
-import { caseDetailApi } from './api'
+import { useAddObservables } from './queries'
 import type { CaseDetailData } from './types'
 import { parseObservableText } from './utils'
 
@@ -19,27 +19,21 @@ const typeStyles: Record<string, string> = {
   unknown: 'bg-muted text-muted-foreground',
 }
 
-export default function CaseOverview({ caseData, onCaseChanged }: { caseData: CaseDetailData; onCaseChanged: () => void }) {
+export default function CaseOverview({ caseData }: { caseData: CaseDetailData }) {
   const [showForm, setShowForm] = useState(false)
   const [text, setText] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
-  const preview = useMemo(() => text.trim() ? parseObservableText(text) : [], [text])
+  const preview = useMemo(() => (text.trim() ? parseObservableText(text) : []), [text])
 
-  const submit = async () => {
+  const addObservables = useAddObservables(caseData.case_id)
+
+  const submit = () => {
     if (preview.length === 0) return
-    setSubmitting(true)
-    setError('')
-    try {
-      await caseDetailApi.addObservables(caseData.case_id, preview)
-      setText('')
-      setShowForm(false)
-      onCaseChanged()
-    } catch {
-      setError('The observables could not be added.')
-    } finally {
-      setSubmitting(false)
-    }
+    addObservables.mutate(preview, {
+      onSuccess: () => {
+        setText('')
+        setShowForm(false)
+      },
+    })
   }
 
   return (
@@ -59,7 +53,7 @@ export default function CaseOverview({ caseData, onCaseChanged }: { caseData: Ca
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Observables ({caseData.observables.length})</h2>
-            <Button variant="secondary" size="sm" onClick={() => { setShowForm(value => !value); setText(''); setError('') }}>
+            <Button variant="secondary" size="sm" onClick={() => { setShowForm(v => !v); setText('') }}>
               <Plus className="size-3.5" aria-hidden="true" />Add observables
             </Button>
           </div>
@@ -67,9 +61,32 @@ export default function CaseOverview({ caseData, onCaseChanged }: { caseData: Ca
             <div className="mb-4 space-y-3 rounded-xl border border-border bg-surface p-4">
               <p className="text-xs text-muted-foreground">Paste one observable per line, or separate values with commas or semicolons.</p>
               <Textarea className="font-mono" rows={4} value={text} onChange={event => setText(event.target.value)} autoFocus placeholder={'1.2.3.4\nevil.example.com'} />
-              {preview.length > 0 && <div className="max-h-40 space-y-1 overflow-y-auto">{preview.map((item, index) => <div key={`${item.value}-${index}`} className="flex items-center gap-2 text-xs"><span className={cn('rounded px-1.5 py-0.5 font-mono', typeStyles[item.observable_type] ?? typeStyles.unknown)}>{item.observable_type}</span><span className="truncate font-mono text-muted-foreground">{item.value}</span></div>)}</div>}
-              {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-              <div className="flex gap-2"><Button onClick={() => void submit()} disabled={submitting || preview.length === 0}>{submitting ? 'Adding…' : `Add ${preview.length} observables`}</Button><Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button></div>
+              {preview.length > 0 && (
+                <div className="max-h-40 space-y-1 overflow-y-auto">
+                  {preview.map((item, index) => (
+                    <div key={`${item.value}-${index}`} className="flex items-center gap-2 text-xs">
+                      <span className={cn('rounded px-1.5 py-0.5 font-mono', typeStyles[item.observable_type] ?? typeStyles.unknown)}>
+                        {item.observable_type}
+                      </span>
+                      <span className="truncate font-mono text-muted-foreground">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {addObservables.error && (
+                <p role="alert" className="text-sm text-danger">
+                  {(addObservables.error as Error).message ?? 'The observables could not be added.'}
+                </p>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  onClick={submit}
+                  disabled={addObservables.isPending || preview.length === 0}
+                >
+                  {addObservables.isPending ? 'Adding…' : `Add ${preview.length} observables`}
+                </Button>
+                <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
+              </div>
             </div>
           )}
           {caseData.observables.length === 0 ? <p className="text-sm text-muted-foreground">No observables yet.</p> : (

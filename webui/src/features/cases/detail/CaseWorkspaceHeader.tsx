@@ -54,15 +54,23 @@ export default function CaseWorkspaceHeader({
           </div>
         </div>
       </header>
-      <nav className="flex shrink-0 overflow-x-auto border-b border-border bg-surface px-2 sm:px-4" aria-label="Case workspace">
+      <nav
+        role="tablist"
+        aria-label="Case workspace"
+        className="flex shrink-0 overflow-x-auto border-b border-border bg-surface px-2 sm:px-4"
+      >
         {tabs.map(tab => (
           <button
             key={tab.id}
             type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
             onClick={() => onTabChange(tab.id)}
             className={cn(
               'whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors',
-              activeTab === tab.id ? 'border-accent text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+              activeTab === tab.id
+                ? 'border-accent text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
           >
             {tab.label}
