@@ -40,6 +40,11 @@ build/
 node_modules/
 package-lock.json
 
+# Large data files (not for GitHub)
+docker/splunk/data/*.tgz
+docker/splunk/data/*.tar.gz
+docker/splunk/data/*.zip
+
 # Working / internal docs
 BACKLOG.md
 UX_BACKLOG.md
