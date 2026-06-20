@@ -72,13 +72,22 @@ class EnrichedIOC(BaseModel):
 
     @field_validator("extra", mode="before")
     @classmethod
-    def _coerce_extra(cls, v: Any) -> dict:
+    def _coerce_extra(cls, v: Any) -> dict[str, Any]:
         if isinstance(v, dict):
             return v
         return {}
 
 
-_ALERT_FIELD_NAMES = {"alert_id", "raw_log", "source_ip", "dest_ip", "timestamp", "rule_name", "original_severity", "extra"}
+_ALERT_FIELD_NAMES = {
+    "alert_id",
+    "raw_log",
+    "source_ip",
+    "dest_ip",
+    "timestamp",
+    "rule_name",
+    "original_severity",
+    "extra",
+}
 
 
 class TriagedAlert(BaseModel):
@@ -121,9 +130,7 @@ class TriagedAlert(BaseModel):
         if not isinstance(v, list):
             return []
         return [
-            item if isinstance(item, str) else (
-                item.get("name") or item.get("actor") or str(item)
-            )
+            item if isinstance(item, str) else (item.get("name") or item.get("actor") or str(item))
             for item in v
         ]
 
@@ -133,9 +140,9 @@ class TriagedAlert(BaseModel):
         if not isinstance(v, list):
             return []
         return [
-            item if isinstance(item, str) else (
-                item.get("technique_id") or item.get("name") or str(item)
-            )
+            item
+            if isinstance(item, str)
+            else (item.get("technique_id") or item.get("name") or str(item))
             for item in v
         ]
 
@@ -145,9 +152,9 @@ class TriagedAlert(BaseModel):
         if not isinstance(v, list):
             return []
         return [
-            item if isinstance(item, str) else (
-                item.get("description") or item.get("action") or str(item)
-            )
+            item
+            if isinstance(item, str)
+            else (item.get("description") or item.get("action") or str(item))
             for item in v
         ]
 
@@ -172,14 +179,21 @@ class AlertTriageResult(BaseModel):
         # Filter out non-dict items and metadata dicts that leak into the array.
         # LFM-2.5 puts top-level summary fields (true_positive_count etc.) as extra
         # list items — keep only dicts that look like TriagedAlert objects.
-        _TRIAGE_KEYS = {"alert", "decision", "risk_score", "confidence", "enriched_iocs",
-                        "related_threat_actors", "mitre_techniques", "recommended_actions",
-                        "analyst_notes"}
+        _TRIAGE_KEYS = {
+            "alert",
+            "decision",
+            "risk_score",
+            "confidence",
+            "enriched_iocs",
+            "related_threat_actors",
+            "mitre_techniques",
+            "recommended_actions",
+            "analyst_notes",
+        }
         alerts = data.get("triaged_alerts")
         if isinstance(alerts, list):
             data["triaged_alerts"] = [
-                a for a in alerts
-                if isinstance(a, dict) and bool(_TRIAGE_KEYS & a.keys())
+                a for a in alerts if isinstance(a, dict) and bool(_TRIAGE_KEYS & a.keys())
             ]
         return data
 

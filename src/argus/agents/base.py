@@ -1,18 +1,18 @@
 """BaseAgent - generic model agentic loop with tool use and run logging."""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import re
 import time
-
-import json_repair
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import date
 from typing import Any, TypeVar
 
 import httpx
+import json_repair
 import structlog
 from pydantic import BaseModel
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -33,14 +33,18 @@ ProgressCallback = Callable[[str], None]
 
 
 @retry(
-    retry=retry_if_exception_type((
-        httpx.ReadTimeout,
-        httpx.RemoteProtocolError,
-        httpx.ConnectError,
-        httpx.ConnectTimeout,
-    )),
+    retry=retry_if_exception_type(
+        (
+            httpx.ReadTimeout,
+            httpx.RemoteProtocolError,
+            httpx.ConnectError,
+            httpx.ConnectTimeout,
+        )
+    ),
     wait=wait_exponential(multiplier=2, min=10, max=90),
-    stop=stop_after_attempt(2),  # 2 attempts max: 1 try + 1 retry. Fail fast; don't queue for hours.
+    stop=stop_after_attempt(
+        2
+    ),  # 2 attempts max: 1 try + 1 retry. Fail fast; don't queue for hours.
     reraise=True,
 )
 def _llm_call_sync(fn: Any, **kwargs: Any) -> Any:
@@ -112,7 +116,9 @@ class BaseAgent(ABC):
             for iteration in range(MAX_LOOP_ITERATIONS):
                 if iteration > 0:
                     self._progress(f"[{self.name}] thinking (iteration {iteration + 1})")
-                system = f"Today's date is {date.today().isoformat()}.\n\n{self.get_system_prompt()}"
+                system = (
+                    f"Today's date is {date.today().isoformat()}.\n\n{self.get_system_prompt()}"
+                )
                 kwargs: dict[str, Any] = {
                     "model": self.model,
                     "max_tokens": getattr(self, "max_output_tokens", 8192),
@@ -149,17 +155,21 @@ class BaseAgent(ABC):
                         f"{out_excerpt}{'…' if len(output_text) > 120 else ''}"
                     )
                     self._log_run(
-                        input_data, response.content,
-                        total_input_tokens, total_output_tokens,
+                        input_data,
+                        response.content,
+                        total_input_tokens,
+                        total_output_tokens,
                         time.monotonic() - start,
                         status="success",
                     )
-                    return response.content
+                    return response.content  # type: ignore[no-any-return]
 
                 if response.stop_reason != "tool_use":
                     self._log_run(
-                        input_data, [],
-                        total_input_tokens, total_output_tokens,
+                        input_data,
+                        [],
+                        total_input_tokens,
+                        total_output_tokens,
                         time.monotonic() - start,
                         status="failed",
                         error_category=AgentFailureCategory.LLM_ERROR.value,
@@ -214,20 +224,19 @@ class BaseAgent(ABC):
                             error=str(e),
                         )
                         self._progress(
-                            f"[{self.name}] ← {block.name}: dispatch_error "
-                            f"({elapsed_ms}ms) — {e}"
+                            f"[{self.name}] ← {block.name}: dispatch_error ({elapsed_ms}ms) — {e}"
                         )
                         result_str = json.dumps({"error": str(e)})
                     return {"type": "tool_result", "tool_use_id": block.id, "content": result_str}
 
-                tool_results = list(
-                    await asyncio.gather(*(_call_tool(b) for b in tool_use_blocks))
-                )
+                tool_results = list(await asyncio.gather(*(_call_tool(b) for b in tool_use_blocks)))
                 messages.append({"role": "user", "content": tool_results})
 
             self._log_run(
-                input_data, [],
-                total_input_tokens, total_output_tokens,
+                input_data,
+                [],
+                total_input_tokens,
+                total_output_tokens,
                 time.monotonic() - start,
                 status="failed",
                 error_category=AgentFailureCategory.LOOP_EXHAUSTED.value,
@@ -248,8 +257,10 @@ class BaseAgent(ABC):
                 error_type=type(exc).__name__,
             )
             self._log_run(
-                input_data, [],
-                total_input_tokens, total_output_tokens,
+                input_data,
+                [],
+                total_input_tokens,
+                total_output_tokens,
                 time.monotonic() - start,
                 status="failed",
                 error_category=AgentFailureCategory.LLM_ERROR.value,
@@ -328,12 +339,12 @@ class BaseAgent(ABC):
             # json_repair parses true_positive as bool True, false_positive as False, etc.
             # Cover both value position (after :) and bare array element position (after [ or ,).
             cleaned = re.sub(
-                r':\s*([a-z][a-z0-9]*(?:_[a-z0-9]+)+)(\s*[,}\]])',
+                r":\s*([a-z][a-z0-9]*(?:_[a-z0-9]+)+)(\s*[,}\]])",
                 r': "\1"\2',
                 cleaned,
             )
             cleaned = re.sub(
-                r'(?<=[\[,])\s*([a-z][a-z0-9]*(?:_[a-z0-9]+)+)(\s*[,\]])',
+                r"(?<=[\[,])\s*([a-z][a-z0-9]*(?:_[a-z0-9]+)+)(\s*[,\]])",
                 r'"\1"\2',
                 cleaned,
             )
@@ -367,9 +378,7 @@ class BaseAgent(ABC):
         return text
 
     def _extract_text(self, content: list[Any]) -> str:
-        return "\n".join(
-            block.text for block in content if hasattr(block, "text")
-        )
+        return "\n".join(block.text for block in content if hasattr(block, "text"))
 
     def _log_run(
         self,
@@ -384,16 +393,18 @@ class BaseAgent(ABC):
         try:
             output_text = self._extract_text(output_content)
             with get_session() as session:
-                session.add(AgentRunRecord(
-                    agent_name=self.name,
-                    input_data=input_data[:4096],
-                    output_data=output_text[:4096],
-                    model_used=self.model,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    duration_seconds=duration,
-                    status=status,
-                    error_category=error_category,
-                ))
+                session.add(
+                    AgentRunRecord(
+                        agent_name=self.name,
+                        input_data=input_data[:4096],
+                        output_data=output_text[:4096],
+                        model_used=self.model,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        duration_seconds=duration,
+                        status=status,
+                        error_category=error_category,
+                    )
+                )
         except Exception as e:
             log.warning("agent.log_run_failed", error=str(e))

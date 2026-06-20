@@ -1,4 +1,5 @@
 """CLI output helpers — Rich terminal rendering, themed console."""
+
 from __future__ import annotations
 
 import io
@@ -27,133 +28,133 @@ from rich.theme import Theme
 
 THEMES: dict[str, dict[str, str]] = {
     "analyst": {
-        "cp.cyan":    "#4499cc bold",
+        "cp.cyan": "#4499cc bold",
         "cp.magenta": "#6677aa bold",
-        "cp.green":   "#338855 bold",
-        "cp.amber":   "#997733",
-        "cp.red":     "#bb3333 bold",
-        "cp.purple":  "#445588",
-        "cp.dim":     "dim #556677",
-        "cp.border":  "#334466",
-        "verdict.malicious":  "#bb3333 bold",
+        "cp.green": "#338855 bold",
+        "cp.amber": "#997733",
+        "cp.red": "#bb3333 bold",
+        "cp.purple": "#445588",
+        "cp.dim": "dim #556677",
+        "cp.border": "#334466",
+        "verdict.malicious": "#bb3333 bold",
         "verdict.suspicious": "#997733",
-        "verdict.benign":     "#338855",
-        "verdict.unknown":    "dim #445588",
+        "verdict.benign": "#338855",
+        "verdict.unknown": "dim #445588",
         "sev.critical": "#bb3333 bold",
-        "sev.high":     "#bb3333",
-        "sev.medium":   "#997733",
-        "sev.low":      "#4499cc",
-        "sev.none":     "dim",
+        "sev.high": "#bb3333",
+        "sev.medium": "#997733",
+        "sev.low": "#4499cc",
+        "sev.none": "dim",
         "triage.tp": "#bb3333 bold",
         "triage.fp": "#338855",
         "triage.ni": "#997733",
     },
     "contrast": {
-        "cp.cyan":    "bright_cyan bold",
+        "cp.cyan": "bright_cyan bold",
         "cp.magenta": "bright_magenta bold",
-        "cp.green":   "bright_green bold",
-        "cp.amber":   "bright_yellow",
-        "cp.red":     "bright_red bold",
-        "cp.purple":  "bright_blue bold",
-        "cp.dim":     "dim white",
-        "cp.border":  "bright_white",
-        "verdict.malicious":  "bright_red bold",
+        "cp.green": "bright_green bold",
+        "cp.amber": "bright_yellow",
+        "cp.red": "bright_red bold",
+        "cp.purple": "bright_blue bold",
+        "cp.dim": "dim white",
+        "cp.border": "bright_white",
+        "verdict.malicious": "bright_red bold",
         "verdict.suspicious": "bright_yellow bold",
-        "verdict.benign":     "bright_green bold",
-        "verdict.unknown":    "dim white",
+        "verdict.benign": "bright_green bold",
+        "verdict.unknown": "dim white",
         "sev.critical": "bright_red bold underline",
-        "sev.high":     "bright_red bold",
-        "sev.medium":   "bright_yellow bold",
-        "sev.low":      "bright_cyan bold",
-        "sev.none":     "dim",
+        "sev.high": "bright_red bold",
+        "sev.medium": "bright_yellow bold",
+        "sev.low": "bright_cyan bold",
+        "sev.none": "dim",
         "triage.tp": "bright_red bold",
         "triage.fp": "bright_green bold",
         "triage.ni": "bright_yellow bold",
     },
     "mono": {
-        "cp.cyan":    "bold",
+        "cp.cyan": "bold",
         "cp.magenta": "bold underline",
-        "cp.green":   "bold",
-        "cp.amber":   "italic",
-        "cp.red":     "bold reverse",
-        "cp.purple":  "dim bold",
-        "cp.dim":     "dim",
-        "cp.border":  "dim",
-        "verdict.malicious":  "bold reverse",
+        "cp.green": "bold",
+        "cp.amber": "italic",
+        "cp.red": "bold reverse",
+        "cp.purple": "dim bold",
+        "cp.dim": "dim",
+        "cp.border": "dim",
+        "verdict.malicious": "bold reverse",
         "verdict.suspicious": "bold italic",
-        "verdict.benign":     "bold",
-        "verdict.unknown":    "dim",
+        "verdict.benign": "bold",
+        "verdict.unknown": "dim",
         "sev.critical": "bold reverse",
-        "sev.high":     "bold underline",
-        "sev.medium":   "bold italic",
-        "sev.low":      "bold",
-        "sev.none":     "dim",
+        "sev.high": "bold underline",
+        "sev.medium": "bold italic",
+        "sev.low": "bold",
+        "sev.none": "dim",
         "triage.tp": "bold reverse",
         "triage.fp": "bold",
         "triage.ni": "bold italic",
     },
     "midnight": {
-        "cp.cyan":    "#7ca2d6 bold",
+        "cp.cyan": "#7ca2d6 bold",
         "cp.magenta": "#a070a0 bold",
-        "cp.green":   "#5aad7e bold",
-        "cp.amber":   "#c49a3c",
-        "cp.red":     "#c26a6a bold",
-        "cp.purple":  "#6b6aad",
-        "cp.dim":     "dim #3a4a5e",
-        "cp.border":  "#2a3a5a",
-        "verdict.malicious":  "#c26a6a bold",
+        "cp.green": "#5aad7e bold",
+        "cp.amber": "#c49a3c",
+        "cp.red": "#c26a6a bold",
+        "cp.purple": "#6b6aad",
+        "cp.dim": "dim #3a4a5e",
+        "cp.border": "#2a3a5a",
+        "verdict.malicious": "#c26a6a bold",
         "verdict.suspicious": "#c49a3c",
-        "verdict.benign":     "#5aad7e",
-        "verdict.unknown":    "dim #6b6aad",
+        "verdict.benign": "#5aad7e",
+        "verdict.unknown": "dim #6b6aad",
         "sev.critical": "#c26a6a bold",
-        "sev.high":     "#c26a6a",
-        "sev.medium":   "#c49a3c",
-        "sev.low":      "#7ca2d6",
-        "sev.none":     "dim",
+        "sev.high": "#c26a6a",
+        "sev.medium": "#c49a3c",
+        "sev.low": "#7ca2d6",
+        "sev.none": "dim",
         "triage.tp": "#c26a6a bold",
         "triage.fp": "#5aad7e",
         "triage.ni": "#c49a3c",
     },
     "nord": {
-        "cp.cyan":    "#88c0d0 bold",
+        "cp.cyan": "#88c0d0 bold",
         "cp.magenta": "#b48ead bold",
-        "cp.green":   "#a3be8c bold",
-        "cp.amber":   "#ebcb8b",
-        "cp.red":     "#bf616a bold",
-        "cp.purple":  "#81a1c1",
-        "cp.dim":     "dim #4c566a",
-        "cp.border":  "#3b4252",
-        "verdict.malicious":  "#bf616a bold",
+        "cp.green": "#a3be8c bold",
+        "cp.amber": "#ebcb8b",
+        "cp.red": "#bf616a bold",
+        "cp.purple": "#81a1c1",
+        "cp.dim": "dim #4c566a",
+        "cp.border": "#3b4252",
+        "verdict.malicious": "#bf616a bold",
         "verdict.suspicious": "#ebcb8b",
-        "verdict.benign":     "#a3be8c",
-        "verdict.unknown":    "dim #81a1c1",
+        "verdict.benign": "#a3be8c",
+        "verdict.unknown": "dim #81a1c1",
         "sev.critical": "#bf616a bold",
-        "sev.high":     "#bf616a",
-        "sev.medium":   "#ebcb8b",
-        "sev.low":      "#88c0d0",
-        "sev.none":     "dim",
+        "sev.high": "#bf616a",
+        "sev.medium": "#ebcb8b",
+        "sev.low": "#88c0d0",
+        "sev.none": "dim",
         "triage.tp": "#bf616a bold",
         "triage.fp": "#a3be8c",
         "triage.ni": "#ebcb8b",
     },
     "ember": {
-        "cp.cyan":    "#e8a26b bold",
+        "cp.cyan": "#e8a26b bold",
         "cp.magenta": "#d4714f bold",
-        "cp.green":   "#7daa6b bold",
-        "cp.amber":   "#cc8833",
-        "cp.red":     "#cc4433 bold",
-        "cp.purple":  "#996644",
-        "cp.dim":     "dim #5a3a22",
-        "cp.border":  "#6b4422",
-        "verdict.malicious":  "#cc4433 bold",
+        "cp.green": "#7daa6b bold",
+        "cp.amber": "#cc8833",
+        "cp.red": "#cc4433 bold",
+        "cp.purple": "#996644",
+        "cp.dim": "dim #5a3a22",
+        "cp.border": "#6b4422",
+        "verdict.malicious": "#cc4433 bold",
         "verdict.suspicious": "#cc8833",
-        "verdict.benign":     "#7daa6b",
-        "verdict.unknown":    "dim #996644",
+        "verdict.benign": "#7daa6b",
+        "verdict.unknown": "dim #996644",
         "sev.critical": "#cc4433 bold",
-        "sev.high":     "#cc4433",
-        "sev.medium":   "#cc8833",
-        "sev.low":      "#e8a26b",
-        "sev.none":     "dim",
+        "sev.high": "#cc4433",
+        "sev.medium": "#cc8833",
+        "sev.low": "#e8a26b",
+        "sev.none": "dim",
         "triage.tp": "#cc4433 bold",
         "triage.fp": "#7daa6b",
         "triage.ni": "#cc8833",
@@ -161,12 +162,12 @@ THEMES: dict[str, dict[str, str]] = {
 }
 
 THEME_DESCRIPTIONS: dict[str, str] = {
-    "analyst":  "Muted steel blues — professional (default)",
+    "analyst": "Muted steel blues — professional (default)",
     "contrast": "Full ANSI saturation — high visibility",
-    "mono":     "Bold and dim only — no color",
+    "mono": "Bold and dim only — no color",
     "midnight": "Deep navy and periwinkle — dark IDE feel",
-    "nord":     "Arctic blues and aurora — Nord palette",
-    "ember":    "Warm amber and flame — firelight on dark",
+    "nord": "Arctic blues and aurora — Nord palette",
+    "ember": "Warm amber and flame — firelight on dark",
 }
 
 _CONFIG_FILE = Path.home() / ".argus_config.json"
@@ -241,7 +242,7 @@ class _ConsoleProxy:
     def _build(self) -> Console:
         if self._stderr:
             return Console(theme=Theme(THEMES[_current_theme]), stderr=True)
-        return Console(theme=Theme(THEMES[_current_theme]), file=_DynamicStdout())
+        return Console(theme=Theme(THEMES[_current_theme]), file=_DynamicStdout())  # type: ignore[arg-type]
 
     def update_theme(self) -> None:
         self._console = self._build()
@@ -268,6 +269,7 @@ err_console = _ConsoleProxy(stderr=True)
 # ---------------------------------------------------------------------------
 # Theme management
 # ---------------------------------------------------------------------------
+
 
 def set_theme(name: str) -> None:
     """Switch to a named theme and replay the full output history."""
@@ -305,21 +307,21 @@ def clear_output_history() -> None:
 _VERDICT_STYLES: dict[str, str] = {
     "malicious": "verdict.malicious",
     "suspicious": "verdict.suspicious",
-    "benign":     "verdict.benign",
-    "unknown":    "verdict.unknown",
+    "benign": "verdict.benign",
+    "unknown": "verdict.unknown",
 }
 
 _SEV_STYLES: dict[str, str] = {
     "critical": "sev.critical",
-    "high":     "sev.high",
-    "medium":   "sev.medium",
-    "low":      "sev.low",
-    "none":     "sev.none",
+    "high": "sev.high",
+    "medium": "sev.medium",
+    "low": "sev.low",
+    "none": "sev.none",
 }
 
 _TRIAGE_STYLES: dict[str, str] = {
-    "true_positive":       "triage.tp",
-    "false_positive":      "triage.fp",
+    "true_positive": "triage.tp",
+    "false_positive": "triage.fp",
     "needs_investigation": "triage.ni",
 }
 
@@ -327,8 +329,10 @@ _TRIAGE_STYLES: dict[str, str] = {
 def _vs(verdict: str) -> str:
     return _VERDICT_STYLES.get(str(verdict), "cp.dim")
 
+
 def _ss(severity: str) -> str:
     return _SEV_STYLES.get(str(severity).lower(), "sev.none")
+
 
 def _ts(decision: str) -> str:
     return _TRIAGE_STYLES.get(str(decision), "cp.dim")
@@ -337,6 +341,7 @@ def _ts(decision: str) -> str:
 # ---------------------------------------------------------------------------
 # Core helpers
 # ---------------------------------------------------------------------------
+
 
 def print_json(data: Any) -> None:
     if isinstance(data, BaseModel):
@@ -354,6 +359,7 @@ def print_error(msg: str) -> None:
 
 def print_agent_error(exc: Exception, as_json: bool = False) -> None:
     from argus.agents.errors import AgentError
+
     if as_json and isinstance(exc, AgentError):
         print(json.dumps(exc.to_dict(), indent=2))
     elif isinstance(exc, AgentError):
@@ -480,10 +486,10 @@ def status(msg: str) -> None:
         set_live_status(msg)
 
 
-
 # ---------------------------------------------------------------------------
 # IOC enrichment
 # ---------------------------------------------------------------------------
+
 
 def render_ioc_result(result: Any, as_json: bool = False) -> None:
     if as_json:
@@ -509,22 +515,23 @@ def render_ioc_result(result: Any, as_json: bool = False) -> None:
             rows.append(f"  [cp.dim]ASN      [/cp.dim] {ioc.asn}")
         if ioc.geolocation:
             rows.append(f"  [cp.dim]Geo      [/cp.dim] {ioc.geolocation}")
-        console.print(Panel(
-            "\n".join(rows) if rows else "[cp.dim]No source details.[/cp.dim]",
-            title=title,
-            border_style="cp.border",
-        ))
+        console.print(
+            Panel(
+                "\n".join(rows) if rows else "[cp.dim]No source details.[/cp.dim]",
+                title=title,
+                border_style="cp.border",
+            )
+        )
 
     if result.high_priority_iocs:
-        console.print(
-            f"\n[cp.red]HIGH PRIORITY ▸[/cp.red] {', '.join(result.high_priority_iocs)}"
-        )
+        console.print(f"\n[cp.red]HIGH PRIORITY ▸[/cp.red] {', '.join(result.high_priority_iocs)}")
     if result.recommended_actions:
         console.print("\n[cp.cyan]Recommended Actions[/cp.cyan]")
         for action in result.recommended_actions:
             console.print(f"  [cp.magenta]▸[/cp.magenta] {action}")
 
     from argus.cli.graph import render_ioc_graph
+
     for ioc in result.indicators:
         render_ioc_graph(ioc)
 
@@ -532,6 +539,7 @@ def render_ioc_result(result: Any, as_json: bool = False) -> None:
 # ---------------------------------------------------------------------------
 # Threat actor
 # ---------------------------------------------------------------------------
+
 
 def render_threat_actor_result(result: Any, as_json: bool = False) -> None:
     if as_json:
@@ -604,6 +612,7 @@ def render_threat_actor_result(result: Any, as_json: bool = False) -> None:
             console.print(f"  [cp.magenta]▸[/cp.magenta] {det}")
 
     from argus.cli.graph import render_actor_graph
+
     for actor in result.actors:
         render_actor_graph(actor)
 
@@ -611,6 +620,7 @@ def render_threat_actor_result(result: Any, as_json: bool = False) -> None:
 # ---------------------------------------------------------------------------
 # Vulnerability
 # ---------------------------------------------------------------------------
+
 
 def render_vuln_result(result: Any, as_json: bool = False) -> None:
     if as_json:
@@ -654,6 +664,7 @@ def render_vuln_result(result: Any, as_json: bool = False) -> None:
 # Triage
 # ---------------------------------------------------------------------------
 
+
 def render_triage_result(result: Any, as_json: bool = False) -> None:
     if as_json:
         print_json(result)
@@ -667,8 +678,8 @@ def render_triage_result(result: Any, as_json: bool = False) -> None:
     )
     stats.add_column("Decision")
     stats.add_column("Count", justify="right", style="cp.cyan")
-    stats.add_row("[triage.tp]True Positive[/triage.tp]",   str(result.true_positive_count))
-    stats.add_row("[triage.fp]False Positive[/triage.fp]",  str(result.false_positive_count))
+    stats.add_row("[triage.tp]True Positive[/triage.tp]", str(result.true_positive_count))
+    stats.add_row("[triage.fp]False Positive[/triage.fp]", str(result.false_positive_count))
     stats.add_row(
         "[triage.ni]Needs Investigation[/triage.ni]",
         str(result.needs_investigation_count),
@@ -713,15 +724,11 @@ def render_triage_result(result: Any, as_json: bool = False) -> None:
 
         # ATT&CK techniques
         if ta.related_techniques:
-            lines.append(
-                "[cp.dim]Techniques:[/cp.dim] " + "  ".join(ta.related_techniques[:8])
-            )
+            lines.append("[cp.dim]Techniques:[/cp.dim] " + "  ".join(ta.related_techniques[:8]))
 
         # Threat actors
         if ta.related_threat_actors:
-            lines.append(
-                "[cp.dim]Actors:[/cp.dim] " + ", ".join(ta.related_threat_actors[:4])
-            )
+            lines.append("[cp.dim]Actors:[/cp.dim] " + ", ".join(ta.related_threat_actors[:4]))
 
         # Why: analyst reasoning
         if ta.analyst_notes:
@@ -742,6 +749,7 @@ def render_triage_result(result: Any, as_json: bool = False) -> None:
 # ---------------------------------------------------------------------------
 # Cache / misc
 # ---------------------------------------------------------------------------
+
 
 def spinner(description: str) -> Progress:
     return Progress(
@@ -765,6 +773,7 @@ def working(description: str, enabled: bool = True) -> Generator[None, None, Non
 
 def cache_stats_display() -> None:
     from argus.storage.cache import cache_stats
+
     stats = cache_stats()
     table = Table(
         title="[cp.cyan]Cache[/cp.cyan]",
@@ -782,5 +791,6 @@ def cache_stats_display() -> None:
 
 def cache_clear_display() -> None:
     from argus.storage.cache import cache_clear
+
     count = cache_clear()
     console.print(f"[cp.green]✓ Cleared {count} cached items.[/cp.green]")

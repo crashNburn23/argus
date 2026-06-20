@@ -143,7 +143,7 @@ async def _lookup_one(cve_id: str, kev_ids: set[str]) -> dict[str, Any]:
     cached = cache_get(cache_key)
     # Only return cache if it's a success (has vulnerabilities key, no error key).
     if cached and "error" not in cached:
-        return cached  # type: ignore[return-value]
+        return cached  # type: ignore[no-any-return]
     try:
         data = await _fetch_nvd({"cveId": cve_id})
         vulns = [_normalize_cve(item, kev_ids) for item in data.get("vulnerabilities", [])]

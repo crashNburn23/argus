@@ -1,4 +1,5 @@
 """CTI Orchestrator - routes tasks to specialized agents registered as model tools."""
+
 from __future__ import annotations
 
 import asyncio
@@ -21,14 +22,15 @@ from argus.llm import create_llm_client
 from argus.storage.database import get_session
 from argus.storage.models_db import AgentRunRecord
 from argus.tools import siem as siem_tool
-from argus.tools.registry import _AVAILABILITY
 
 log = structlog.get_logger()
 
 MAX_ITERATIONS = 8
-MAX_COMPLETION_RETRIES = 1   # one verification cycle is usually sufficient
+MAX_COMPLETION_RETRIES = 1  # one verification cycle is usually sufficient
 MAX_GAP_FILL_ITERATIONS = 2  # limit gap-fill depth to avoid runaway loops
-AGENT_TIMEOUT_SECONDS = 3600  # hard cutoff per sub-agent call (60 min); streaming prevents idle drops
+AGENT_TIMEOUT_SECONDS = (
+    3600  # hard cutoff per sub-agent call (60 min); streaming prevents idle drops
+)
 ProgressCallback = Callable[[str], None]
 
 _SYSTEM = """\
@@ -215,8 +217,7 @@ _AGENT_TOOL_DEFINITIONS = [
                     "type": "array",
                     "items": {"type": "string"},
                     "description": (
-                        "Domain names found verbatim in the article text. "
-                        "Omit if none are present."
+                        "Domain names found verbatim in the article text. Omit if none are present."
                     ),
                 },
                 "hashes": {
@@ -373,9 +374,9 @@ class CTIOrchestrator:
             else:
                 return json.dumps({"error": f"Unknown agent: {tool_name}"})
             result = await asyncio.wait_for(coro, timeout=AGENT_TIMEOUT_SECONDS)
-            result_str = (
-                str(result) if tool_name in _STRING_TOOLS else str(result.model_dump_json())
-            )
+            from pydantic import BaseModel as _BM
+
+            result_str = str(result.model_dump_json()) if isinstance(result, _BM) else str(result)
             log.info("orchestrator.agent_result", agent=tool_name, result_bytes=len(result_str))
             self._progress(f"[orchestrator] ← {tool_name}: complete ({len(result_str)}B)")
             return result_str
@@ -433,9 +434,7 @@ class CTIOrchestrator:
             )
 
             if response.stop_reason == "end_turn":
-                final_text = "\n".join(
-                    b.text for b in response.content if hasattr(b, "text")
-                )
+                final_text = "\n".join(b.text for b in response.content if hasattr(b, "text"))
                 self._progress("orchestrator: composing initial answer")
                 if getattr(self, "_persistent", False):
                     self._conversation = [
@@ -458,9 +457,7 @@ class CTIOrchestrator:
                 result = await self._invoke_agent(block.name, dict(block.input))
                 return {"type": "tool_result", "tool_use_id": block.id, "content": result}
 
-            tool_results = list(
-                await asyncio.gather(*(_call_agent(b) for b in tool_use_blocks))
-            )
+            tool_results = list(await asyncio.gather(*(_call_agent(b) for b in tool_use_blocks)))
             messages.append({"role": "user", "content": tool_results})
 
         if final_text is None:
@@ -496,9 +493,7 @@ class CTIOrchestrator:
                 f"orchestrator: filling {len(check['retriable_gaps'])} gap(s) "
                 f"(pass {check_attempt + 1}/{MAX_COMPLETION_RETRIES})"
             )
-            updated = await self._fill_gaps(
-                user_query, final_text, check["retriable_gaps"]
-            )
+            updated = await self._fill_gaps(user_query, final_text, check["retriable_gaps"])
             if updated is not None:
                 final_text = updated
             else:
@@ -524,13 +519,9 @@ class CTIOrchestrator:
         Failures default to complete=True so a broken check never loops forever.
         """
         self._progress(
-            f"orchestrator: verifying completeness "
-            f"(check {attempt + 1}/{MAX_COMPLETION_RETRIES})"
+            f"orchestrator: verifying completeness (check {attempt + 1}/{MAX_COMPLETION_RETRIES})"
         )
-        prompt = (
-            f"ORIGINAL QUESTION:\n{original_query}\n\n"
-            f"CURRENT ANALYSIS:\n{current_answer}"
-        )
+        prompt = f"ORIGINAL QUESTION:\n{original_query}\n\nCURRENT ANALYSIS:\n{current_answer}"
         try:
             response = await _llm_call_with_retry(
                 self.client.create_message,
@@ -587,9 +578,7 @@ class CTIOrchestrator:
                     messages=fill_messages,
                 )
                 if response.stop_reason == "end_turn":
-                    return "\n".join(
-                        b.text for b in response.content if hasattr(b, "text")
-                    )
+                    return "\n".join(b.text for b in response.content if hasattr(b, "text"))
                 if response.stop_reason != "tool_use":
                     break
                 fill_messages.append({"role": "assistant", "content": response.content})
@@ -601,9 +590,7 @@ class CTIOrchestrator:
                     result = await self._invoke_agent(block.name, dict(block.input))
                     return {"type": "tool_result", "tool_use_id": block.id, "content": result}
 
-                tool_results = list(
-                    await asyncio.gather(*(_call_fill(b) for b in fill_blocks))
-                )
+                tool_results = list(await asyncio.gather(*(_call_fill(b) for b in fill_blocks)))
                 fill_messages.append({"role": "user", "content": tool_results})
         except Exception as exc:
             log.warning("orchestrator.gap_fill_failed", error=str(exc))
@@ -614,14 +601,16 @@ class CTIOrchestrator:
     ) -> None:
         try:
             with get_session() as session:
-                session.add(AgentRunRecord(
-                    agent_name="orchestrator",
-                    input_data=input_data[:4096],
-                    output_data=output[:4096],
-                    model_used=self.model,
-                    input_tokens=input_tok,
-                    output_tokens=output_tok,
-                    duration_seconds=duration,
-                ))
+                session.add(
+                    AgentRunRecord(
+                        agent_name="orchestrator",
+                        input_data=input_data[:4096],
+                        output_data=output[:4096],
+                        model_used=self.model,
+                        input_tokens=input_tok,
+                        output_tokens=output_tok,
+                        duration_seconds=duration,
+                    )
+                )
         except Exception as e:
             log.warning("orchestrator.log_failed", error=str(e))
