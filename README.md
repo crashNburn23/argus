@@ -135,21 +135,33 @@ Other
 
 ## Web UI
 
-```bash
-argus serve              # start at http://127.0.0.1:8000
-argus serve --port 9000
-argus serve --reload     # auto-reload on code changes
-```
-
-React + Tailwind frontend served by a FastAPI backend. Pages: Chat, Cases, IOC Graph,
-Tools, Settings. The IOC Graph page renders enrichment pivot results as a force-directed
-network diagram.
-
 Build the frontend once before first run:
 
 ```bash
 cd webui && npm install && npm run build
 ```
+
+Then start the server:
+
+```bash
+argus serve              # http://127.0.0.1:8000
+argus serve --port 9000
+argus serve --reload     # auto-reload on code changes (dev)
+```
+
+Or from inside the interactive session: `/serve`
+
+React + Tailwind frontend backed by FastAPI. Five pages:
+
+| Page | What it does |
+|------|-------------|
+| **Chat** | Full conversation interface — same as the terminal session, works with active cases |
+| **Cases** | Browse, create, and inspect cases; view artifacts, observables, evidence, and reports |
+| **IOC Graph** | Force-directed network diagram of enrichment and pivot results for the active case |
+| **Tools** | See which integrations are configured and their live availability status |
+| **Settings** | Edit model, provider, API keys, and data-disclosure mode without touching `.env` directly |
+
+The IOC Graph is the most useful view after running `case enrich` + `case pivot` — it shows how IPs, domains, and certificates cluster across infrastructure.
 
 ## One-shot commands
 
@@ -184,6 +196,22 @@ argus benchmark run --all
 argus benchmark run --all --minimum-score 0.8   # non-zero exit if score drops
 argus benchmark run --all --json
 ```
+
+### Model baselines
+
+Save a run as a named baseline, then compare future runs against it:
+
+```bash
+# Capture current model's performance
+argus benchmark run --all --save-baseline baselines/sonnet-4-6.json
+
+# Later — switch model in .env, then compare
+argus benchmark run --all --compare baselines/sonnet-4-6.json
+```
+
+The comparison output shows per-case score deltas and the overall average delta so you
+can see exactly where a model gained or lost ground. The `--json` flag includes
+`baseline_score` and `score_delta` fields for scripting.
 
 ## Architecture
 
@@ -226,7 +254,7 @@ uv run ruff check src tests
 uv run mypy src/argus --ignore-missing-imports
 ```
 
-CI (pre-commit hooks) runs all three on every push. Currently 194 tests.
+CI (pre-commit hooks) runs all three on every push. Currently 177 tests.
 
 ## TODO
 
