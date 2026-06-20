@@ -1,4 +1,5 @@
 """Cases REST API — CRUD for CTI cases."""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,32 +11,35 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, HTTPException
-
-log = structlog.get_logger()
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from argus.models.case import Case, CaseNote, CaseReference, CaseStatus, ReportArtifact
 from argus.models.evidence import Observable, ObservableType, Relationship, RelationshipType
 from argus.storage.cases import CaseNotFoundError, CaseStore, CaseStoreError
 
+log = structlog.get_logger()
+
 # ── IOC regex patterns for pivot extraction ────────────────────────────────────
 
 _IOC_PATTERNS: list[tuple[str, ObservableType]] = [
-    (r'\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d+)?\b', ObservableType.IP),
-    (r'\b[a-fA-F0-9]{64}\b', ObservableType.SHA256),
-    (r'\b[a-fA-F0-9]{40}\b', ObservableType.SHA1),
-    (r'\b[a-fA-F0-9]{32}\b', ObservableType.MD5),
-    (r'\b(CVE-\d{4}-\d+)\b', ObservableType.CVE),
-    (r'(?:^|\s)((?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,})(?:\s|$)', ObservableType.DOMAIN),
+    (r"\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d+)?\b", ObservableType.IP),
+    (r"\b[a-fA-F0-9]{64}\b", ObservableType.SHA256),
+    (r"\b[a-fA-F0-9]{40}\b", ObservableType.SHA1),
+    (r"\b[a-fA-F0-9]{32}\b", ObservableType.MD5),
+    (r"\b(CVE-\d{4}-\d+)\b", ObservableType.CVE),
+    (
+        r"(?:^|\s)((?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,})(?:\s|$)",
+        ObservableType.DOMAIN,
+    ),
 ]
 
 
 def _extract_discovered_iocs(text: str) -> list[tuple[str, ObservableType]]:
     """Extract IOCs from the '## Additional IOCs Discovered' section of analysis text."""
     match = re.search(
-        r'##\s+Additional\s+IOCs?\s+Discovered\b(.+?)(?=^##\s|\Z)',
+        r"##\s+Additional\s+IOCs?\s+Discovered\b(.+?)(?=^##\s|\Z)",
         text,
         re.MULTILINE | re.DOTALL | re.IGNORECASE,
     )
@@ -50,6 +54,7 @@ def _extract_discovered_iocs(text: str) -> list[tuple[str, ObservableType]]:
             if value and value not in found:
                 found[value] = obs_type
     return list(found.items())
+
 
 _FEEDBACK_LOG = Path.home() / ".argus" / "feedback.jsonl"
 
@@ -73,6 +78,7 @@ def _load_feedback_lessons(limit: int = 10) -> list[str]:
         return list(reversed(corrections))
     except OSError:
         return []
+
 
 router = APIRouter()
 
@@ -232,8 +238,8 @@ async def add_observables(case_id: str, req: AddObservablesRequest) -> dict[str,
 
 class ReviewRequest(BaseModel):
     observable_ids: list[str] | None = None  # None = all manual obs
-    note_ids: list[str] | None = None         # None = all manual notes
-    reference_ids: list[str] | None = None    # None = no references included
+    note_ids: list[str] | None = None  # None = all manual notes
+    reference_ids: list[str] | None = None  # None = no references included
 
 
 def _build_review_query(
@@ -316,14 +322,16 @@ def _apply_review_result(
     new_obs: list[Observable] = []
     for value, obs_type in discovered:
         if value not in existing_values:
-            new_obs.append(Observable(
-                value=value,
-                observable_type=obs_type,
-                labels=["argus_discovered"],
-                first_seen=now,
-                last_seen=now,
-                metadata={"source": "argus_review"},
-            ))
+            new_obs.append(
+                Observable(
+                    value=value,
+                    observable_type=obs_type,
+                    labels=["argus_discovered"],
+                    first_seen=now,
+                    last_seen=now,
+                    metadata={"source": "argus_review"},
+                )
+            )
             existing_values.add(value)
 
     # Create DERIVED_FROM edges: each discovered IOC → all original seed IOCs
@@ -334,46 +342,53 @@ def _apply_review_result(
         for seed_id in seed_ids:
             pair = (obs.observable_id, seed_id)
             if pair not in existing_rel_pairs:
-                new_rels.append(Relationship(
-                    relationship_type=RelationshipType.DERIVED_FROM,
-                    source_ref=obs.observable_id,
-                    target_ref=seed_id,
-                    confidence=0.7,
-                    rationale="Discovered during Argus pivot analysis",
-                ))
+                new_rels.append(
+                    Relationship(
+                        relationship_type=RelationshipType.DERIVED_FROM,
+                        source_ref=obs.observable_id,
+                        target_ref=seed_id,
+                        confidence=0.7,
+                        rationale="Discovered during Argus pivot analysis",
+                    )
+                )
                 existing_rel_pairs.add(pair)
 
-    return case.model_copy(update={
-        "notes": [*new_notes, review_note],
-        "references": [*updated_refs, *deduped_new_refs],
-        "observables": [*case.observables, *new_obs],
-        "relationships": [*case.relationships, *new_rels],
-    })
+    return case.model_copy(
+        update={
+            "notes": [*new_notes, review_note],
+            "references": [*updated_refs, *deduped_new_refs],
+            "observables": [*case.observables, *new_obs],
+            "relationships": [*case.relationships, *new_rels],
+        }
+    )
 
 
 def _resolve_review_selections(
-    case: Any, req: "ReviewRequest"
+    case: Any, req: ReviewRequest
 ) -> tuple[list[Any], list[Any], list[Any]]:
     all_manual_obs = [o for o in case.observables if "manually_added" in o.labels]
     all_manual_notes = [n for n in case.notes if n.metadata.get("source") == "manual"]
     manual_obs = (
         [o for o in all_manual_obs if o.observable_id in req.observable_ids]
-        if req.observable_ids is not None else all_manual_obs
+        if req.observable_ids is not None
+        else all_manual_obs
     )
     manual_notes = (
         [n for n in all_manual_notes if n.note_id in req.note_ids]
-        if req.note_ids is not None else all_manual_notes
+        if req.note_ids is not None
+        else all_manual_notes
     )
     selected_refs = (
         [r for r in case.references if r.ref_id in req.reference_ids]
-        if req.reference_ids is not None else []
+        if req.reference_ids is not None
+        else []
     )
     return manual_obs, manual_notes, selected_refs
 
 
 @router.post("/{case_id}/review")
 async def review_case(case_id: str, req: ReviewRequest = ReviewRequest()) -> dict[str, Any]:
-    """Run the case analysis agent against selected manually-added observables, notes, and references."""
+    """Run the case analysis agent against selected observables, notes, and references."""
     try:
         case = CaseStore().get(case_id)
     except CaseNotFoundError:
@@ -381,18 +396,23 @@ async def review_case(case_id: str, req: ReviewRequest = ReviewRequest()) -> dic
 
     manual_obs, manual_notes, selected_refs = _resolve_review_selections(case, req)
     if not manual_obs and not manual_notes and not selected_refs:
-        raise HTTPException(status_code=400, detail="No observables, notes, or references selected for review")
+        raise HTTPException(
+            status_code=400, detail="No observables, notes, or references selected for review"
+        )
 
     reviewed_note_ids = {n.note_id for n in manual_notes}
     reviewed_ref_ids = {r.ref_id for r in selected_refs}
     query = _build_review_query(case, manual_obs, manual_notes, selected_refs)
 
     from argus.agents.case_analysis_agent import CaseAnalysisAgent
+
     agent = CaseAnalysisAgent()
     try:
         result = await agent.run(query=query)
     except Exception as exc:
-        log.error("review.agent_failed", case_id=case_id, error=str(exc), error_type=type(exc).__name__)
+        log.error(
+            "review.agent_failed", case_id=case_id, error=str(exc), error_type=type(exc).__name__
+        )
         raise HTTPException(status_code=500, detail=f"Analysis error: {exc}")
 
     updated = CaseStore().update(
@@ -420,7 +440,9 @@ async def stream_review_case(
 
     manual_obs, manual_notes, selected_refs = _resolve_review_selections(case, req)
     if not manual_obs and not manual_notes and not selected_refs:
-        raise HTTPException(status_code=400, detail="No observables, notes, or references selected for review")
+        raise HTTPException(
+            status_code=400, detail="No observables, notes, or references selected for review"
+        )
 
     reviewed_note_ids = {n.note_id for n in manual_notes}
     reviewed_ref_ids = {r.ref_id for r in selected_refs}
@@ -437,6 +459,7 @@ async def stream_review_case(
 
     async def _run() -> None:
         from argus.agents.case_analysis_agent import CaseAnalysisAgent
+
         agent = CaseAnalysisAgent(progress=_on_progress)
         try:
             result = await agent.run(query=query)
@@ -448,13 +471,20 @@ async def stream_review_case(
                 (n for n in reversed(updated.notes) if n.metadata.get("source") == "argus_review"),
                 None,
             )
-            await queue.put({
-                "type": "done",
-                "note": review_note_out.model_dump(mode="json") if review_note_out else {},
-                "summary": _summary(updated),
-            })
+            await queue.put(
+                {
+                    "type": "done",
+                    "note": review_note_out.model_dump(mode="json") if review_note_out else {},
+                    "summary": _summary(updated),
+                }
+            )
         except Exception as exc:
-            log.error("stream_review.agent_failed", case_id=case_id, error=str(exc), error_type=type(exc).__name__)
+            log.error(
+                "stream_review.agent_failed",
+                case_id=case_id,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
             await queue.put({"type": "error", "text": str(exc)})
 
     asyncio.create_task(_run())
@@ -474,6 +504,7 @@ async def stream_review_case(
 
 
 # ── Note edit / delete / re-analyze ───────────────────────────────────────────
+
 
 class UpdateNoteRequest(BaseModel):
     body: str
@@ -537,7 +568,13 @@ async def reanalyze_note(case_id: str, note_id: str) -> dict[str, Any]:
     try:
         result = await orchestrator.run(user_query=query)
     except Exception as exc:
-        log.error("reanalyze.orchestrator_failed", case_id=case_id, note_id=note_id, error=str(exc), error_type=type(exc).__name__)
+        log.error(
+            "reanalyze.orchestrator_failed",
+            case_id=case_id,
+            note_id=note_id,
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
         raise HTTPException(status_code=500, detail=f"Orchestrator error: {exc}")
 
     def _add(c: Case) -> Case:
@@ -553,6 +590,7 @@ async def reanalyze_note(case_id: str, note_id: str) -> dict[str, Any]:
 
 
 # ── References ─────────────────────────────────────────────────────────────────
+
 
 class AddReferenceRequest(BaseModel):
     url: str
@@ -590,7 +628,9 @@ async def add_reference(case_id: str, req: AddReferenceRequest) -> dict[str, Any
 
 
 @router.patch("/{case_id}/references/{ref_id}")
-async def update_reference(case_id: str, ref_id: str, req: UpdateReferenceRequest) -> dict[str, Any]:
+async def update_reference(
+    case_id: str, ref_id: str, req: UpdateReferenceRequest
+) -> dict[str, Any]:
     def _mutate(case: Case) -> Case:
         new_refs = []
         found = False
@@ -655,7 +695,9 @@ async def list_reports(case_id: str) -> list[dict[str, Any]]:
 @router.post("/{case_id}/reports", status_code=201)
 async def generate_report(case_id: str, req: GenerateReportRequest) -> dict[str, Any]:
     if req.audience not in REPORT_AUDIENCES:
-        raise HTTPException(status_code=400, detail=f"Unknown audience. Valid: {', '.join(REPORT_AUDIENCES)}")
+        raise HTTPException(
+            status_code=400, detail=f"Unknown audience. Valid: {', '.join(REPORT_AUDIENCES)}"
+        )
     try:
         case = CaseStore().get(case_id)
     except CaseNotFoundError:
@@ -667,7 +709,13 @@ async def generate_report(case_id: str, req: GenerateReportRequest) -> dict[str,
     try:
         content = await agent.generate(case)
     except Exception as exc:
-        log.error("report.agent_failed", case_id=case_id, audience=req.audience, error=str(exc), error_type=type(exc).__name__)
+        log.error(
+            "report.agent_failed",
+            case_id=case_id,
+            audience=req.audience,
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
         raise HTTPException(status_code=500, detail=f"Report generation error: {exc}")
 
     if req.special_notes.strip():
@@ -706,6 +754,7 @@ async def delete_report(case_id: str, report_id: str) -> dict[str, bool]:
 
 # ── IOC relationship graph ─────────────────────────────────────────────────────
 
+
 @router.get("/{case_id}/graph")
 async def get_case_graph(case_id: str) -> dict[str, Any]:
     """Return graph nodes (observables) and edges (relationships) for visualisation."""
@@ -722,16 +771,18 @@ async def get_case_graph(case_id: str) -> dict[str, Any]:
             ev = evidence_by_id.get(evidence_id)
             if ev is None:
                 continue
-            out.append({
-                "id": ev.evidence_id,
-                "source": ev.source_name or ev.source_type,
-                "status": ev.status.value,
-                "confidence": ev.confidence,
-                "summary": ev.summary,
-                "excerpt": ev.raw_excerpt,
-                "reference": ev.external_reference,
-                "inference_basis": ev.inference_basis,
-            })
+            out.append(
+                {
+                    "id": ev.evidence_id,
+                    "source": ev.source_name or ev.source_type,
+                    "status": ev.status.value,
+                    "confidence": ev.confidence,
+                    "summary": ev.summary,
+                    "excerpt": ev.raw_excerpt,
+                    "reference": ev.external_reference,
+                    "inference_basis": ev.inference_basis,
+                }
+            )
         return out
 
     nodes = [
@@ -773,13 +824,16 @@ async def get_case_graph(case_id: str) -> dict[str, Any]:
 
 # ── Feedback / learning ────────────────────────────────────────────────────────
 
+
 class NoteFeedbackRequest(BaseModel):
     correct: bool
     correction: str = ""
 
 
 @router.post("/{case_id}/notes/{note_id}/feedback", status_code=201)
-async def submit_note_feedback(case_id: str, note_id: str, req: NoteFeedbackRequest) -> dict[str, str]:
+async def submit_note_feedback(
+    case_id: str, note_id: str, req: NoteFeedbackRequest
+) -> dict[str, str]:
     entry = {
         "timestamp": datetime.now(UTC).isoformat(),
         "case_id": case_id,
@@ -793,14 +847,20 @@ async def submit_note_feedback(case_id: str, note_id: str, req: NoteFeedbackRequ
 
     # Persist the vote into note metadata so it survives page refresh
     try:
+
         def _record_feedback(case: Case) -> Case:
             new_notes = [
-                n.model_copy(update={
-                    "metadata": {**n.metadata, "feedback": "up" if req.correct else "down"},
-                }) if n.note_id == note_id else n
+                n.model_copy(
+                    update={
+                        "metadata": {**n.metadata, "feedback": "up" if req.correct else "down"},
+                    }
+                )
+                if n.note_id == note_id
+                else n
                 for n in case.notes
             ]
             return case.model_copy(update={"notes": new_notes})
+
         CaseStore().update(case_id, _record_feedback)
     except CaseNotFoundError:
         pass  # feedback log is already written; don't fail the request
@@ -809,6 +869,7 @@ async def submit_note_feedback(case_id: str, note_id: str, req: NoteFeedbackRequ
 
 
 # ── Misc helpers ───────────────────────────────────────────────────────────────
+
 
 def _coerce_obs_type(raw: str) -> ObservableType:
     try:

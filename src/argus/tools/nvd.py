@@ -1,4 +1,5 @@
 """NVD CVE lookup tool — no API key required."""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +14,9 @@ from argus.storage.cache import cache_get, cache_set, get_rate_limiter
 from argus.tools.http import get_client
 
 _NVD_BASE = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-_CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+_CISA_KEV_URL = (
+    "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+)
 _CISA_KEV_CACHE_KEY = "cisa:kev:full"
 _CISA_KEV_TTL = 86400
 
@@ -39,11 +42,14 @@ def get_tool_definition() -> dict[str, Any]:
                 "cve_ids": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of CVE IDs to look up in parallel, e.g. ['CVE-2021-44228', 'CVE-2023-23397']",
+                    "description": (
+                        "List of CVE IDs to look up in parallel,"
+                        " e.g. ['CVE-2021-44228', 'CVE-2023-23397']"
+                    ),
                 },
                 "cve_id": {
                     "type": "string",
-                    "description": "Single CVE ID (use cve_ids list instead when looking up multiple)",
+                    "description": "Single CVE ID (use cve_ids list instead for multiple)",
                 },
                 "keyword": {
                     "type": "string",

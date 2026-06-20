@@ -1,4 +1,5 @@
 """VirusTotal tool — reference implementation of the tool pattern. Requires VIRUSTOTAL_API_KEY."""
+
 from __future__ import annotations
 
 import json
@@ -108,11 +109,19 @@ async def virustotal_lookup(indicator: str, ioc_type: str) -> str:
     ioc_type_norm = ioc_type.lower()
     vt_type = _VT_TYPE_MAP.get(ioc_type_norm)
     if not vt_type:
-        return json.dumps({"error": f"Unsupported ioc_type: {ioc_type!r}. Use: ip, domain, url, md5, sha1, sha256"})
+        return json.dumps(
+            {
+                "error": (
+                    f"Unsupported ioc_type: {ioc_type!r}."
+                    " Use: ip, domain, url, md5, sha1, sha256"
+                )
+            }
+        )
 
     try:
         if ioc_type_norm == "url":
             import base64
+
             url_id = base64.urlsafe_b64encode(indicator.encode()).decode().rstrip("=")
             raw = await _fetch(f"urls/{url_id}")
         else:
@@ -121,8 +130,13 @@ async def virustotal_lookup(indicator: str, ioc_type: str) -> str:
         cache_set(cache_key, result, ttl=3600)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            result = {"indicator": indicator, "ioc_type": ioc_type_norm, "status": "not_found",
-                      "malicious": 0, "total_engines": 0}
+            result = {
+                "indicator": indicator,
+                "ioc_type": ioc_type_norm,
+                "status": "not_found",
+                "malicious": 0,
+                "total_engines": 0,
+            }
             cache_set(cache_key, result, ttl=3600)
         else:
             result = {"error": str(e), "indicator": indicator}

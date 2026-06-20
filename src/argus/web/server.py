@@ -1,4 +1,5 @@
 """FastAPI application factory for the Argus web UI."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,8 +15,8 @@ from argus.web.api.settings import router as settings_router
 
 # Look for built frontend in a few places
 _CANDIDATES = [
-    Path(__file__).parent / "static",       # packaged install
-    Path.cwd() / "webui" / "dist",          # dev: run from project root
+    Path(__file__).parent / "static",  # packaged install
+    Path.cwd() / "webui" / "dist",  # dev: run from project root
     Path(__file__).parents[4] / "webui" / "dist",  # editable install
 ]
 
@@ -59,12 +60,18 @@ def create_app() -> FastAPI:
                 return JSONResponse({"error": "Not found"}, status_code=404)
             return FileResponse(str(static_dir / "index.html"))
     else:
+
         @app.get("/", include_in_schema=False)
         async def no_frontend() -> JSONResponse:
-            return JSONResponse({
-                "message": "Argus API is running. Build the frontend with: cd webui && npm install && npm run build",
-                "docs": "/api/docs",
-            })
+            return JSONResponse(
+                {
+                    "message": (
+                        "Argus API is running."
+                        " Build the frontend: cd webui && npm install && npm run build"
+                    ),
+                    "docs": "/api/docs",
+                }
+            )
 
     return app
 

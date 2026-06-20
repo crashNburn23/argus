@@ -1,9 +1,10 @@
 """CaseAnalysisAgent — direct IOC investigation with mandatory pivoting for case reviews."""
+
 from __future__ import annotations
 
 from typing import Any
 
-from argus.agents.base import BaseAgent, ProgressCallback
+from argus.agents.base import BaseAgent
 from argus.tools.registry import dispatch_tool, get_available_tools
 
 _SYSTEM = """\
