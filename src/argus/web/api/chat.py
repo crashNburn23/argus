@@ -17,6 +17,16 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _visible_result_text(result: str) -> str:
+    text = result.strip()
+    if text:
+        return text
+    return (
+        "Argus completed the request, but no response text was returned. "
+        "Check server logs for the orchestrator run details."
+    )
+
+
 class _ProgressBridge:
     """Mutable callable — swap the destination queue between messages without
     recreating the orchestrator (preserving conversation history)."""
@@ -112,7 +122,10 @@ async def chat_ws(websocket: WebSocket) -> None:
                 original_text: str = text,
             ) -> None:
                 try:
-                    result = await orchestrator.run(user_query=q)
+                    result = _visible_result_text(await orchestrator.run(user_query=q))
+                    if "no response text" in result:
+                        log.warning("chat_ws.empty_result")
+                    log.info("chat_ws.result", result_bytes=len(result), mode=m, case_id=cid)
                     await queue.put({"type": "result", "text": result})
 
                     if m == "case" and cid:

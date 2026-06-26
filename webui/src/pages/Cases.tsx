@@ -9,11 +9,12 @@ import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
 import CaseCard from '../features/cases/CaseCard'
 import CreateCaseForm from '../features/cases/CreateCaseForm'
-import { useCases } from '../features/cases/queries'
-import type { CaseSort } from '../features/cases/types'
+import { useCases, useDeleteCase } from '../features/cases/queries'
+import type { CaseSort, CaseSummary } from '../features/cases/types'
 
 export default function Cases() {
   const casesQuery = useCases()
+  const deleteCaseMutation = useDeleteCase()
   const [showCreate, setShowCreate] = useState(false)
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -44,6 +45,11 @@ export default function Cases() {
   const resetFilters = () => {
     setQuery('')
     setStatusFilter('all')
+  }
+  const handleDelete = (item: CaseSummary) => {
+    const confirmed = window.confirm(`Delete case "${item.title}"?\n\nThis removes the case and all stored notes, observables, evidence, and reports.`)
+    if (!confirmed) return
+    deleteCaseMutation.mutate(item.case_id)
   }
 
   return (
@@ -109,7 +115,14 @@ export default function Cases() {
                 {filtersActive && <Button variant="ghost" size="sm" onClick={resetFilters}>Clear filters</Button>}
               </div>
               <div className="space-y-3">
-                {visibleCases.map(item => <CaseCard key={item.case_id} item={item} />)}
+                {visibleCases.map(item => (
+                  <CaseCard
+                    key={item.case_id}
+                    item={item}
+                    deleting={deleteCaseMutation.isPending && deleteCaseMutation.variables === item.case_id}
+                    onDelete={handleDelete}
+                  />
+                ))}
               </div>
             </section>
           )}

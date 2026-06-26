@@ -197,6 +197,21 @@ argus benchmark run --all --minimum-score 0.8   # non-zero exit if score drops
 argus benchmark run --all --json
 ```
 
+Deterministic IOC-pivot and evidence-grounded reporting suites are also included:
+
+```bash
+argus benchmark pivot list
+argus benchmark pivot run --all --minimum-score 0.8
+
+argus benchmark report list
+argus benchmark report run --all --minimum-score 0.8
+argus benchmark report run --all --save-baseline baselines/reporting.json
+```
+
+The reporting suite covers CTI, SOC, executive, and IR audiences. It scores factual
+coverage, evidence attachment, required structure, actions, intelligence gaps, unknown
+citations, and prohibited unsupported claims.
+
 ### Model baselines
 
 Save a run as a named baseline, then compare future runs against it:

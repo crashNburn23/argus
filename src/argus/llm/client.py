@@ -77,7 +77,13 @@ class AnthropicClient:
 
 class OllamaClient:
     def __init__(self, base_url: str, timeout: float) -> None:
-        self._client = httpx.Client(base_url=base_url.rstrip("/"), timeout=timeout)
+        # Ollama is normally local. Ignore ambient proxy variables so a workstation
+        # proxy cannot break localhost model calls with unsupported schemes.
+        self._client = httpx.Client(
+            base_url=base_url.rstrip("/"),
+            timeout=timeout,
+            trust_env=False,
+        )
 
     def create_message(
         self,

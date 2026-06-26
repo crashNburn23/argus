@@ -27,8 +27,8 @@ export default function AppearanceSettings() {
     <section>
       <h2 className="mb-4 text-base font-semibold">Appearance</h2>
       <div className="divide-y divide-border rounded-lg border border-border bg-surface">
-        <div className="flex items-center gap-4 px-4 py-3">
-          <span className="w-40 shrink-0 text-sm text-muted-foreground">Theme</span>
+        <div className="flex items-center justify-between gap-4 px-4 py-3 sm:justify-start">
+          <span className="text-sm text-muted-foreground sm:w-40 sm:shrink-0">Theme</span>
           <span className="font-mono text-sm text-foreground capitalize">{theme}</span>
         </div>
         <div className="px-4 py-4">

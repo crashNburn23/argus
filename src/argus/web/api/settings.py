@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from argus.cli.commands.model import list_ollama_models
 from argus.config.settings import get_settings
 from argus.tools.registry import _AGENT_TOOLS, tool_status
 
@@ -70,11 +70,7 @@ _ANTHROPIC_MODELS = [
 
 def _ollama_models(base_url: str) -> list[str]:
     try:
-        response = httpx.get(f"{base_url.rstrip('/')}/api/tags", timeout=2.0)
-        response.raise_for_status()
-        return sorted(
-            item["name"] for item in response.json().get("models", []) if item.get("name")
-        )
+        return sorted(list_ollama_models(base_url, timeout=2.0))
     except Exception:
         return []
 

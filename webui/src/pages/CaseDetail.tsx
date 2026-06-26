@@ -29,6 +29,8 @@ export default function CaseDetail() {
   const [selectedRefIds, setSelectedRefIds] = useState<Set<string>>(new Set())
   const [reviewing, setReviewing] = useState(false)
   const [reviewError, setReviewError] = useState('')
+  const [analysisCount, setAnalysisCount] = useState(0)
+  const [analysisComplete, setAnalysisComplete] = useState(false)
 
   const openReviewModal = () => {
     if (!caseData) return
@@ -52,8 +54,11 @@ export default function CaseDetail() {
   }
 
   const confirmReview = async () => {
+    const count = selectedObsIds.size + selectedNoteIds.size + selectedRefIds.size
     setShowReviewModal(false)
     setReviewing(true)
+    setAnalysisCount(count)
+    setAnalysisComplete(false)
     setReviewError('')
     try {
       await reviewCase.mutateAsync({
@@ -62,6 +67,7 @@ export default function CaseDetail() {
         reference_ids: [...selectedRefIds],
       })
       setActiveTab('notes')
+      setAnalysisComplete(true)
     } catch (error) {
       setReviewError(
         error instanceof ApiError ? error.message : 'Network error — review may have timed out',
@@ -110,8 +116,14 @@ export default function CaseDetail() {
         <div className="flex flex-none items-center gap-3 border-b border-success/20 bg-success/10 px-6 py-2">
           <span className="inline-block size-3.5 flex-none animate-spin rounded-full border border-success border-t-transparent" />
           <span className="text-sm text-success">
-            Argus is analyzing — results will appear in Notes when complete.
+            Analyzing {analysisCount} {analysisCount === 1 ? 'item' : 'items'} — results will appear in Notes when complete.
           </span>
+        </div>
+      )}
+      {analysisComplete && !reviewing && (
+        <div className="flex flex-none items-center justify-between gap-3 border-b border-success/20 bg-success/10 px-4 py-2 sm:px-6">
+          <span className="text-sm text-success">Analysis complete. Review the generated findings in Notes.</span>
+          <button type="button" onClick={() => setAnalysisComplete(false)} className="flex-none text-xs text-success/70 hover:text-success">Dismiss</button>
         </div>
       )}
       {reviewError && !reviewing && (

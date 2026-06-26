@@ -15,7 +15,11 @@ from argus.config.settings import get_settings
 
 
 def list_ollama_models(base_url: str, timeout: float = 5.0) -> list[str]:
-    response = httpx.get(f"{base_url.rstrip('/')}/api/tags", timeout=timeout)
+    response = httpx.get(
+        f"{base_url.rstrip('/')}/api/tags",
+        timeout=timeout,
+        trust_env=False,
+    )
     response.raise_for_status()
     return [item["name"] for item in response.json().get("models", [])]
 

@@ -17,6 +17,7 @@ from argus.agents.errors import AgentError
 from argus.agents.threat_actor_agent import ThreatActorAgent
 from argus.agents.triage_agent import TriageAgent
 from argus.agents.vuln_agent import VulnIntelAgent
+from argus.async_utils import run_sync
 from argus.config.settings import get_settings
 from argus.llm import create_llm_client
 from argus.storage.database import get_session
@@ -421,7 +422,9 @@ class CTIOrchestrator:
             )
 
             if response.stop_reason == "end_turn":
-                final_text = "\n".join(b.text for b in response.content if hasattr(b, "text"))
+                final_text = "\n".join(
+                    b.text for b in response.content if hasattr(b, "text")
+                ).strip()
                 self._progress("orchestrator: composing initial answer")
                 if getattr(self, "_persistent", False):
                     self._conversation = [
@@ -452,6 +455,14 @@ class CTIOrchestrator:
             if getattr(self, "_persistent", False):
                 self._conversation = messages
             return "Orchestrator could not produce a response."
+
+        if not final_text:
+            fallback = self._fallback_from_tool_results(messages)
+            final_text = (
+                fallback
+                or "Orchestrator completed, but the model returned an empty response."
+            )
+            log.warning("orchestrator.empty_final_response")
 
         # --- Completion verification loop ---
         permanent_gaps: list[str] = []
@@ -493,6 +504,29 @@ class CTIOrchestrator:
 
         self._log_run(user_query, final_text, total_input, total_output, time.monotonic() - start)
         return final_text
+
+    @staticmethod
+    def _fallback_from_tool_results(messages: list[dict[str, Any]]) -> str:
+        tool_outputs: list[str] = []
+        for message in reversed(messages):
+            content = message.get("content")
+            if not isinstance(content, list):
+                continue
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "tool_result":
+                    text = str(item.get("content", "")).strip()
+                    if text:
+                        tool_outputs.append(text[:1200])
+            if tool_outputs:
+                break
+        if not tool_outputs:
+            return ""
+        joined = "\n\n".join(tool_outputs[:3])
+        return (
+            "The model completed without a narrative response. "
+            "Latest tool output is below for analyst review:\n\n"
+            f"```json\n{joined}\n```"
+        )
 
     async def _check_completion(
         self,
@@ -556,7 +590,7 @@ class CTIOrchestrator:
         ]
         try:
             for iteration in range(MAX_GAP_FILL_ITERATIONS):
-                response = await asyncio.to_thread(
+                response = await run_sync(
                     self.client.create_message,
                     model=self.model,
                     max_tokens=8192,

@@ -1,0 +1,190 @@
+[
+  {
+    "case_id": "REPORT-0001",
+    "title": "Certificate-linked loader infrastructure",
+    "audience": "cti",
+    "description": "Assess a small infrastructure cluster discovered from a suspicious update domain.",
+    "scope": "External infrastructure observed during May 2026",
+    "evidence": [
+      {
+        "evidence_id": "ev_dns_001",
+        "source_name": "Passive DNS",
+        "source_type": "enrichment",
+        "status": "confirmed",
+        "confidence": 0.95,
+        "summary": "update-check.test and telemetry-check.test both resolved to 203.0.113.80 during April 2026."
+      },
+      {
+        "evidence_id": "ev_cert_001",
+        "source_name": "Certificate Transparency",
+        "source_type": "enrichment",
+        "status": "confirmed",
+        "confidence": 0.95,
+        "summary": "Certificate CERT-A1 contained update-check.test and telemetry-check.test as subject alternative names."
+      },
+      {
+        "evidence_id": "ev_vt_001",
+        "source_name": "VirusTotal",
+        "source_type": "enrichment",
+        "status": "confirmed",
+        "confidence": 0.9,
+        "summary": "telemetry-check.test was detected by 9 of 90 engines and labeled loader-c2."
+      }
+    ],
+    "expected": {
+      "required_sections": ["Executive Summary", "Key Findings", "Technical Indicators", "Infrastructure Analysis", "Confidence Assessment", "Recommended Collection"],
+      "required_facts": [
+        {"name": "shared host", "alternatives": ["203.0.113.80", "same IP"], "evidence_ids": ["ev_dns_001"]},
+        {"name": "certificate overlap", "alternatives": ["CERT-A1", "subject alternative names", "shared certificate"], "evidence_ids": ["ev_cert_001"]},
+        {"name": "reputation result", "alternatives": ["9 of 90", "9/90", "loader-c2"], "evidence_ids": ["ev_vt_001"]}
+      ],
+      "required_actions": [
+        {"name": "monitor cluster", "alternatives": ["monitor update-check.test", "watchlist update-check.test", "hunt for update-check.test"]}
+      ],
+      "required_gaps": [
+        {"name": "attribution gap", "alternatives": ["attribution is unknown", "no actor attribution", "attribution remains", "cannot attribute"]}
+      ],
+      "forbidden_claims": ["APT29", "Lazarus Group", "Scattered Spider"]
+    }
+  },
+  {
+    "case_id": "REPORT-0002",
+    "title": "Encoded PowerShell phishing activity",
+    "audience": "soc",
+    "description": "Produce detection guidance for activity observed on a finance workstation.",
+    "scope": "FIN-WS-044 and associated network telemetry",
+    "evidence": [
+      {
+        "evidence_id": "ev_edr_002",
+        "source_name": "EDR",
+        "source_type": "alert",
+        "status": "confirmed",
+        "confidence": 0.98,
+        "summary": "WINWORD.EXE spawned powershell.exe with an encoded command on FIN-WS-044 as user j.smith."
+      },
+      {
+        "evidence_id": "ev_net_002",
+        "source_name": "Network Sensor",
+        "source_type": "alert",
+        "status": "confirmed",
+        "confidence": 0.95,
+        "summary": "FIN-WS-044 connected to 198.51.100.24 over TCP 443 immediately after PowerShell launched."
+      },
+      {
+        "evidence_id": "ev_attack_002",
+        "source_name": "Analyst Mapping",
+        "source_type": "analysis",
+        "status": "confirmed",
+        "confidence": 0.9,
+        "summary": "The observed PowerShell execution maps to MITRE ATT&CK T1059.001."
+      }
+    ],
+    "expected": {
+      "required_sections": ["Threat Summary", "Indicators for Immediate Watchlisting", "Detection Guidance", "MITRE ATT&CK Coverage", "Recommended Alert Tuning", "Escalation Criteria"],
+      "required_facts": [
+        {"name": "process chain", "alternatives": ["WINWORD.EXE spawned powershell.exe", "Word spawned PowerShell", "WINWORD.EXE → powershell.exe"], "evidence_ids": ["ev_edr_002"]},
+        {"name": "destination", "alternatives": ["198.51.100.24"], "evidence_ids": ["ev_net_002"]},
+        {"name": "attack mapping", "alternatives": ["T1059.001"], "evidence_ids": ["ev_attack_002"]}
+      ],
+      "required_actions": [
+        {"name": "process detection", "alternatives": ["alert when Word spawns PowerShell", "detect WINWORD.EXE spawning powershell.exe", "Office spawning PowerShell"]},
+        {"name": "escalation", "alternatives": ["isolate FIN-WS-044", "isolate the host", "contain FIN-WS-044"]}
+      ],
+      "required_gaps": [
+        {"name": "payload gap", "alternatives": ["decode the PowerShell", "encoded command has not been decoded", "payload contents are unknown"]}
+      ],
+      "forbidden_claims": ["confirmed ransomware", "APT29"]
+    }
+  },
+  {
+    "case_id": "REPORT-0003",
+    "title": "File server encryption incident",
+    "audience": "exec",
+    "description": "Brief leadership on operational risk and immediate decisions after file encryption activity.",
+    "scope": "Shared file server FILE-07",
+    "evidence": [
+      {
+        "evidence_id": "ev_fim_003",
+        "source_name": "File Integrity Monitoring",
+        "source_type": "alert",
+        "status": "confirmed",
+        "confidence": 0.99,
+        "summary": "FILE-07 modified 1,842 documents in 90 seconds and created README_RESTORE_FILES.txt."
+      },
+      {
+        "evidence_id": "ev_edr_003",
+        "source_name": "EDR",
+        "source_type": "alert",
+        "status": "confirmed",
+        "confidence": 0.99,
+        "summary": "vssadmin.exe deleted all shadow copies on FILE-07 immediately before mass file modification."
+      },
+      {
+        "evidence_id": "ev_scope_003",
+        "source_name": "Asset Inventory",
+        "source_type": "inventory",
+        "status": "confirmed",
+        "confidence": 0.9,
+        "summary": "FILE-07 supports shared documents used by Finance and Legal; downstream impact has not been assessed."
+      }
+    ],
+    "expected": {
+      "required_sections": ["Situation Summary", "Business Impact Assessment", "What We Know vs. What We Don't Know", "Actions Underway", "Decision Points", "Recommended Next Steps"],
+      "required_facts": [
+        {"name": "encryption scale", "alternatives": ["1,842", "1842 documents"], "evidence_ids": ["ev_fim_003"]},
+        {"name": "recovery impairment", "alternatives": ["shadow copies", "recovery copies"], "evidence_ids": ["ev_edr_003"]},
+        {"name": "business services", "alternatives": ["Finance and Legal", "Finance", "Legal"], "evidence_ids": ["ev_scope_003"]}
+      ],
+      "required_actions": [
+        {"name": "containment authorization", "alternatives": ["isolate FILE-07", "take FILE-07 offline", "contain the server"]},
+        {"name": "recovery decision", "alternatives": ["authorize recovery", "restore from backups", "business continuity"]}
+      ],
+      "required_gaps": [
+        {"name": "downstream impact", "alternatives": ["downstream impact has not been assessed", "full impact is unknown", "scope remains unknown"]}
+      ],
+      "forbidden_claims": ["the attacker is", "data was exfiltrated", "ransom was paid"]
+    }
+  },
+  {
+    "case_id": "REPORT-0004",
+    "title": "Incomplete DNS tunneling investigation",
+    "audience": "ir",
+    "description": "Report suspicious DNS behavior while accurately representing collection failures.",
+    "scope": "Marketing workstation MKT-WS-028",
+    "evidence": [
+      {
+        "evidence_id": "ev_dns_004",
+        "source_name": "DNS Analytics",
+        "source_type": "alert",
+        "status": "confirmed",
+        "confidence": 0.85,
+        "summary": "MKT-WS-028 generated 640 high-entropy DNS queries to telemetry-example.test at a regular 60-second cadence."
+      },
+      {
+        "evidence_id": "ev_edr_failed_004",
+        "source_name": "EDR Collection",
+        "source_type": "collection",
+        "status": "failed",
+        "confidence": 0.0,
+        "summary": "Endpoint telemetry collection failed because MKT-WS-028 was offline."
+      }
+    ],
+    "expected": {
+      "required_sections": ["Threat Summary", "Immediate Containment Actions", "Indicators for Threat Hunt", "Timeline of Observed Activity", "Forensic Priorities", "Recovery Guidance"],
+      "required_facts": [
+        {"name": "query volume", "alternatives": ["640"], "evidence_ids": ["ev_dns_004"]},
+        {"name": "query pattern", "alternatives": ["high-entropy", "high entropy", "60-second cadence"], "evidence_ids": ["ev_dns_004"]},
+        {"name": "domain", "alternatives": ["telemetry-example.test"], "evidence_ids": ["ev_dns_004"]}
+      ],
+      "required_actions": [
+        {"name": "endpoint collection", "alternatives": ["collect endpoint telemetry", "acquire endpoint telemetry", "bring MKT-WS-028 online"]},
+        {"name": "dns review", "alternatives": ["review DNS query payloads", "inspect DNS payloads", "analyze the DNS queries"]}
+      ],
+      "required_gaps": [
+        {"name": "collection failure", "alternatives": ["collection failed", "workstation was offline", "endpoint evidence is unavailable"]},
+        {"name": "unconfirmed tunneling", "alternatives": ["tunneling is unconfirmed", "possible DNS tunneling", "requires investigation"]}
+      ],
+      "forbidden_claims": ["confirmed data exfiltration", "confirmed command and control", "endpoint telemetry shows"]
+    }
+  }
+]

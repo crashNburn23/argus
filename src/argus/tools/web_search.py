@@ -5,7 +5,6 @@ Also provides url_fetch for reading a specific page URL and returning clean text
 
 from __future__ import annotations
 
-import asyncio
 import html as _html
 import json
 import re
@@ -14,6 +13,7 @@ from typing import Any
 
 from ddgs import DDGS
 
+from argus.async_utils import run_sync
 from argus.storage.cache import cache_get, cache_set
 
 # ---------------------------------------------------------------------------
@@ -162,7 +162,7 @@ async def web_search(query: str, num_results: int = 8) -> str:
         return json.dumps(cached)
 
     try:
-        raw = await asyncio.to_thread(_ddg_search, query, num_results)
+        raw = await run_sync(_ddg_search, query, num_results)
         results = [
             {
                 "title": r.get("title", ""),

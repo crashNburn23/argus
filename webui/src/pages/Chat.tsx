@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { ArrowRight, RefreshCw, Settings } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { Link } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import Button from '../components/ui/Button'
 import Textarea from '../components/ui/Textarea'
@@ -8,7 +10,7 @@ import { useGlobalChat } from '../features/chat/useGlobalChat'
 
 export default function Chat() {
   const [input, setInput] = useState('')
-  const { messages, connected, running, send, cancel, clear } = useGlobalChat()
+  const { messages, connected, running, send, cancel, clear, reconnect } = useGlobalChat()
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -40,11 +42,7 @@ export default function Chat() {
       />
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
-        {messages.length === 0 && (
-          <p className="mt-12 text-center text-sm text-muted-foreground">
-            No messages yet. Ask about a threat actor, CVE, or IOC — or paste a URL to analyze a report.
-          </p>
-        )}
+        {messages.length === 0 && <ChatEmptyState onSelect={setInput} />}
         {messages.map((message, index) => (
           <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
@@ -73,9 +71,13 @@ export default function Chat() {
       </div>
 
       <div className="shrink-0 border-t border-border bg-surface p-4">
-        <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className={`size-2 rounded-full ${connected ? 'bg-success' : 'bg-danger'}`} />
-          {connected ? 'Connected' : 'Reconnecting…'}
+          <span>{connected ? 'Connected' : 'Chat service unavailable'}</span>
+          {!connected && <>
+            <button type="button" onClick={reconnect} className="ml-1 inline-flex items-center gap-1 font-medium text-accent hover:underline"><RefreshCw className="size-3" aria-hidden="true" />Retry</button>
+            <Link to="/settings" className="inline-flex items-center gap-1 font-medium text-accent hover:underline"><Settings className="size-3" aria-hidden="true" />Settings</Link>
+          </>}
         </div>
         <div className="flex items-end gap-2">
           <Textarea
@@ -101,4 +103,23 @@ export default function Chat() {
       </div>
     </div>
   )
+}
+
+const STARTERS = [
+  ['Investigate an IOC', 'Investigate this IOC and summarize reputation, infrastructure, and related threats: '],
+  ['Research a threat actor', 'Research this threat actor, including recent campaigns, TTPs, and attributed infrastructure: '],
+  ['Analyze a report URL', 'Analyze this threat intelligence report and extract key findings, IOCs, and TTPs: '],
+  ['Assess a CVE', 'Assess this CVE for severity, exploitation status, affected products, and remediation priority: CVE-'],
+] as const
+
+function ChatEmptyState({ onSelect }: { onSelect: (value: string) => void }) {
+  return <div className="mx-auto mt-8 max-w-2xl rounded-xl border border-border bg-surface p-5 sm:mt-12 sm:p-6">
+    <h2 className="font-semibold text-foreground">Start an intelligence task</h2>
+    <p className="mt-1 text-sm text-muted-foreground">Choose a starting point or write a custom request below.</p>
+    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      {STARTERS.map(([label, prompt]) => <button key={label} type="button" onClick={() => onSelect(prompt)} className="group flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-3 text-left text-sm text-foreground hover:border-accent/50 hover:bg-surface-raised">
+        <span>{label}</span><ArrowRight className="size-4 shrink-0 text-muted-foreground group-hover:text-accent" aria-hidden="true" />
+      </button>)}
+    </div>
+  </div>
 }

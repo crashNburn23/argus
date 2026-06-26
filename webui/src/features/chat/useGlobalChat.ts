@@ -31,6 +31,8 @@ export function useGlobalChat() {
   }, [messages])
 
   const connect = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return
+    window.clearTimeout(reconnectTimerRef.current)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const socket = new WebSocket(`${protocol}//${window.location.host}/api/chat/ws`)
     wsRef.current = socket
@@ -52,7 +54,13 @@ export function useGlobalChat() {
         })
       } else if (msg.type === 'result') {
         progressRef.current = ''
-        setMessages(prev => [...prev.filter(m => !m.streaming), { role: 'assistant', content: msg.text }])
+        const content = msg.text.trim()
+        setMessages(prev => [
+          ...prev.filter(m => !m.streaming),
+          content
+            ? { role: 'assistant', content }
+            : { role: 'system', content: 'Argus completed, but no response text was returned.' },
+        ])
         setRunning(false)
       } else if (msg.type === 'error' || msg.type === 'cancelled') {
         progressRef.current = ''
@@ -86,6 +94,7 @@ export function useGlobalChat() {
 
   const cancel = () => wsRef.current?.send(JSON.stringify({ type: 'cancel' }))
   const clear = () => wsRef.current?.send(JSON.stringify({ type: 'clear' }))
+  const reconnect = () => connect()
 
-  return { messages, connected, running, send, cancel, clear }
+  return { messages, connected, running, send, cancel, clear, reconnect }
 }

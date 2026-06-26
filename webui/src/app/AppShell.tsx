@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { BriefcaseBusiness, Eye, Menu, MessageSquare, Settings, Wrench, X, type LucideIcon } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { useSettings } from '../features/settings/queries'
 import { cn } from '../lib/cn'
+import type { AppSettings } from '../features/settings/types'
 
 interface NavItem {
   to: string
@@ -16,7 +18,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
-function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+function Sidebar({ onNavigate, settings }: { onNavigate?: () => void; settings?: AppSettings }) {
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-4">
@@ -48,8 +50,17 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         ))}
       </nav>
 
-      <div className="border-t border-sidebar-border px-4 py-3 text-[11px] text-muted-foreground">
-        Analyst workspace
+      <div className="space-y-2 border-t border-sidebar-border px-4 py-3 text-[11px] text-muted-foreground">
+        {settings ? <>
+          <div className="flex items-center justify-between gap-2">
+            <span className="capitalize">{settings.model_provider}</span>
+            <span className="truncate font-mono" title={settings.model}>{settings.model || 'No model'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+            <span className="truncate capitalize">{settings.disclosure_mode.replace(/-/g, ' ')}</span>
+          </div>
+        </> : <span>Loading workspace…</span>}
       </div>
     </div>
   )
@@ -58,13 +69,14 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 export default function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
+  const { data: settings } = useSettings()
 
   useEffect(() => setMobileOpen(false), [location.pathname])
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background text-foreground">
       <aside className="hidden w-60 shrink-0 border-r border-sidebar-border lg:block">
-        <Sidebar />
+        <Sidebar settings={settings} />
       </aside>
 
       {mobileOpen && (
@@ -76,7 +88,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             aria-label="Close navigation"
           />
           <aside className="relative h-full w-72 max-w-[85vw] border-r border-sidebar-border shadow-2xl">
-            <Sidebar onNavigate={() => setMobileOpen(false)} />
+            <Sidebar settings={settings} onNavigate={() => setMobileOpen(false)} />
             <button
               type="button"
               onClick={() => setMobileOpen(false)}

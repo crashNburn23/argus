@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any
 
+from argus.async_utils import run_sync
 from argus.config.settings import get_settings
 from argus.storage.cache import cache_get, cache_set, get_rate_limiter
 
@@ -49,7 +49,7 @@ async def shodan_lookup(
         api = shodan_lib.Shodan(settings.api_key("shodan"))
 
         if ip:
-            host = await asyncio.to_thread(api.host, ip)
+            host = await run_sync(api.host, ip)
             _vulns = host.get("vulns") or {}
             result = {
                 "ip": ip,
@@ -72,7 +72,7 @@ async def shodan_lookup(
                 ],
             }
         elif cve:
-            search_result = await asyncio.to_thread(api.search, f"vuln:{cve}", limit=10)
+            search_result = await run_sync(api.search, f"vuln:{cve}", limit=10)
             result = {
                 "cve": cve,
                 "total_exposed": search_result.get("total", 0),
@@ -87,7 +87,7 @@ async def shodan_lookup(
                 ],
             }
         elif query:
-            search_result = await asyncio.to_thread(api.search, query, limit=10)
+            search_result = await run_sync(api.search, query, limit=10)
             result = {
                 "query": query,
                 "total": search_result.get("total", 0),

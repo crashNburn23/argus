@@ -1,0 +1,158 @@
+[
+  {
+    "case_id": "PIVOT-0001",
+    "title": "Direct domain-to-host pivot",
+    "difficulty": "direct",
+    "prompt": "Determine the infrastructure associated with the seed domain. Enrich every material IOC and preserve evidence references.",
+    "seed_observables": [
+      {"value": "login-secure.test", "observable_type": "domain", "disposition": "seed"}
+    ],
+    "fixtures": [
+      {
+        "tool": "virustotal_lookup",
+        "match": {"indicator": "login-secure.test", "ioc_type": "domain"},
+        "result": {"indicator": "login-secure.test", "ioc_type": "domain", "malicious": 18, "total_engines": 90, "popular_threat_label": "credential-phishing"}
+      },
+      {
+        "tool": "passive_dns_lookup",
+        "match": {"indicator": "login-secure.test", "indicator_type": "domain"},
+        "result": {"indicator": "login-secure.test", "status": "ok", "resolution_count": 1, "resolutions": [{"ip_address": "198.51.100.42", "date": "2026-05-03"}]}
+      },
+      {
+        "tool": "virustotal_lookup",
+        "match": {"indicator": "198.51.100.42", "ioc_type": "ip"},
+        "result": {"indicator": "198.51.100.42", "ioc_type": "ip", "malicious": 12, "total_engines": 90, "asn": "AS64520"}
+      },
+      {
+        "tool": "whois_lookup",
+        "match": {"domain": "login-secure.test"},
+        "result": {"domain": "login-secure.test", "registrar": "Example Registrar", "creation_date": "2026-05-01", "registrant_org": "Privacy Protected", "nameservers": ["ns1.example.test"]}
+      }
+    ],
+    "expected": {
+      "observables": [
+        {"value": "login-secure.test", "observable_type": "domain", "disposition": "seed"},
+        {"value": "198.51.100.42", "observable_type": "ip", "disposition": "related"},
+        {"value": "AS64520", "observable_type": "asn", "disposition": "related"}
+      ],
+      "relationships": [
+        {"source": "login-secure.test", "target": "198.51.100.42", "relationship_type": "resolves_to"},
+        {"source": "198.51.100.42", "target": "AS64520", "relationship_type": "hosted_by"}
+      ],
+      "required_tool_calls": [
+        {"tool": "virustotal_lookup", "indicator": "login-secure.test"},
+        {"tool": "passive_dns_lookup", "indicator": "login-secure.test"},
+        {"tool": "virustotal_lookup", "indicator": "198.51.100.42"},
+        {"tool": "whois_lookup", "indicator": "login-secure.test"}
+      ]
+    }
+  },
+  {
+    "case_id": "PIVOT-0002",
+    "title": "Certificate-reuse infrastructure cluster",
+    "difficulty": "multi_hop",
+    "prompt": "Investigate whether certificate and DNS history reveal additional infrastructure. Validate each newly discovered domain before relating it to the seed.",
+    "seed_observables": [
+      {"value": "update-check.test", "observable_type": "domain", "disposition": "seed"}
+    ],
+    "fixtures": [
+      {
+        "tool": "ssl_cert_lookup",
+        "match": {"indicator": "update-check.test", "indicator_type": "domain"},
+        "result": {"indicator": "update-check.test", "status": "ok", "cert_count": 1, "all_sans": ["update-check.test", "telemetry-check.test"], "certs": [{"thumbprint_sha256": "CERT-A1", "sans": ["update-check.test", "telemetry-check.test"]}]}
+      },
+      {
+        "tool": "passive_dns_lookup",
+        "match": {"indicator": "update-check.test", "indicator_type": "domain"},
+        "result": {"indicator": "update-check.test", "status": "ok", "resolution_count": 1, "resolutions": [{"ip_address": "203.0.113.80", "date": "2026-04-10"}]}
+      },
+      {
+        "tool": "passive_dns_lookup",
+        "match": {"indicator": "telemetry-check.test", "indicator_type": "domain"},
+        "result": {"indicator": "telemetry-check.test", "status": "ok", "resolution_count": 1, "resolutions": [{"ip_address": "203.0.113.80", "date": "2026-04-11"}]}
+      },
+      {
+        "tool": "virustotal_lookup",
+        "match": {"indicator": "telemetry-check.test", "ioc_type": "domain"},
+        "result": {"indicator": "telemetry-check.test", "ioc_type": "domain", "malicious": 9, "total_engines": 90, "popular_threat_label": "loader-c2"}
+      }
+    ],
+    "expected": {
+      "observables": [
+        {"value": "update-check.test", "observable_type": "domain", "disposition": "seed"},
+        {"value": "telemetry-check.test", "observable_type": "domain", "disposition": "related"},
+        {"value": "203.0.113.80", "observable_type": "ip", "disposition": "related"}
+      ],
+      "relationships": [
+        {"source": "update-check.test", "target": "telemetry-check.test", "relationship_type": "certificate_san"},
+        {"source": "update-check.test", "target": "203.0.113.80", "relationship_type": "resolves_to"},
+        {"source": "telemetry-check.test", "target": "203.0.113.80", "relationship_type": "resolves_to"}
+      ],
+      "required_tool_calls": [
+        {"tool": "ssl_cert_lookup", "indicator": "update-check.test"},
+        {"tool": "passive_dns_lookup", "indicator": "update-check.test"},
+        {"tool": "passive_dns_lookup", "indicator": "telemetry-check.test"},
+        {"tool": "virustotal_lookup", "indicator": "telemetry-check.test"}
+      ]
+    }
+  },
+  {
+    "case_id": "PIVOT-0003",
+    "title": "Shared-hosting false cluster",
+    "difficulty": "adversarial",
+    "prompt": "Assess the seed without treating every co-hosted domain as actor-controlled. Preserve legitimate co-hosts as noise and explain the attribution gap.",
+    "seed_observables": [
+      {"value": "docs-sync.test", "observable_type": "domain", "disposition": "seed"}
+    ],
+    "fixtures": [
+      {
+        "tool": "passive_dns_lookup",
+        "match": {"indicator": "docs-sync.test", "indicator_type": "domain"},
+        "result": {"indicator": "docs-sync.test", "status": "ok", "resolution_count": 1, "resolutions": [{"ip_address": "192.0.2.200", "date": "2026-05-20"}]}
+      },
+      {
+        "tool": "passive_dns_lookup",
+        "match": {"indicator": "192.0.2.200", "indicator_type": "ip"},
+        "result": {"indicator": "192.0.2.200", "status": "ok", "resolution_count": 3, "resolutions": [{"hostname": "docs-sync.test"}, {"hostname": "legitimate-shop.test"}, {"hostname": "community-news.test"}]}
+      },
+      {
+        "tool": "shodan_lookup",
+        "match": {"ip": "192.0.2.200"},
+        "result": {"ip": "192.0.2.200", "org": "Commodity Shared Hosting", "asn": "AS64530", "ports": [80, 443], "hostnames": ["shared-200.hosting.test"]}
+      },
+      {
+        "tool": "virustotal_lookup",
+        "match": {"indicator": "legitimate-shop.test", "ioc_type": "domain"},
+        "result": {"indicator": "legitimate-shop.test", "ioc_type": "domain", "malicious": 0, "harmless": 70, "total_engines": 90}
+      },
+      {
+        "tool": "virustotal_lookup",
+        "match": {"indicator": "community-news.test", "ioc_type": "domain"},
+        "result": {"indicator": "community-news.test", "ioc_type": "domain", "malicious": 0, "harmless": 72, "total_engines": 90}
+      }
+    ],
+    "expected": {
+      "observables": [
+        {"value": "docs-sync.test", "observable_type": "domain", "disposition": "seed"},
+        {"value": "192.0.2.200", "observable_type": "ip", "disposition": "related"},
+        {"value": "legitimate-shop.test", "observable_type": "domain", "disposition": "noise"},
+        {"value": "community-news.test", "observable_type": "domain", "disposition": "noise"},
+        {"value": "AS64530", "observable_type": "asn", "disposition": "noise"}
+      ],
+      "relationships": [
+        {"source": "docs-sync.test", "target": "192.0.2.200", "relationship_type": "resolves_to"},
+        {"source": "legitimate-shop.test", "target": "192.0.2.200", "relationship_type": "resolves_to"},
+        {"source": "community-news.test", "target": "192.0.2.200", "relationship_type": "resolves_to"},
+        {"source": "192.0.2.200", "target": "AS64530", "relationship_type": "hosted_by"}
+      ],
+      "required_tool_calls": [
+        {"tool": "passive_dns_lookup", "indicator": "docs-sync.test"},
+        {"tool": "passive_dns_lookup", "indicator": "192.0.2.200"},
+        {"tool": "shodan_lookup", "indicator": "192.0.2.200"},
+        {"tool": "virustotal_lookup", "indicator": "legitimate-shop.test"},
+        {"tool": "virustotal_lookup", "indicator": "community-news.test"}
+      ],
+      "forbidden_attributions": ["APT29", "Lazarus Group", "Scattered Spider"]
+    }
+  }
+]

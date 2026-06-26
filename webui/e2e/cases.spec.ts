@@ -3,6 +3,11 @@ import { test, expect } from '@playwright/test'
 // Requires: Argus backend running on :8000 and Vite dev server on :5173
 // Run with: npx playwright test
 
+async function openFirstCase(page: import('@playwright/test').Page) {
+  await page.goto('/cases')
+  await page.locator('section[aria-label="Case list"] a').first().click()
+}
+
 test.describe('Case workflow', () => {
   test('navigates to cases list', async ({ page }) => {
     await page.goto('/cases')
@@ -29,11 +34,7 @@ test.describe('Case workflow', () => {
   })
 
   test('opens a case workspace', async ({ page }) => {
-    await page.goto('/cases')
-
-    // Click the first case in the list
-    const firstCase = page.getByRole('link').first()
-    await firstCase.click()
+    await openFirstCase(page)
 
     // Case workspace should show tabs
     await expect(page.getByRole('tab', { name: /Overview/i })).toBeVisible()
@@ -43,8 +44,7 @@ test.describe('Case workflow', () => {
   })
 
   test('adds an observable to a case', async ({ page }) => {
-    await page.goto('/cases')
-    await page.getByRole('link').first().click()
+    await openFirstCase(page)
 
     // Should be on overview tab
     await page.getByRole('tab', { name: /Overview/i }).click()
@@ -67,8 +67,7 @@ test.describe('Case workflow', () => {
   })
 
   test('adds a note to a case', async ({ page }) => {
-    await page.goto('/cases')
-    await page.getByRole('link').first().click()
+    await openFirstCase(page)
 
     // Navigate to notes tab
     await page.getByRole('tab', { name: /Notes/i }).click()
@@ -89,8 +88,7 @@ test.describe('Case workflow', () => {
   })
 
   test('adds a reference to a case', async ({ page }) => {
-    await page.goto('/cases')
-    await page.getByRole('link').first().click()
+    await openFirstCase(page)
 
     await page.getByRole('tab', { name: /References/i }).click()
     await page.getByRole('button', { name: /add reference/i }).click()
@@ -103,12 +101,11 @@ test.describe('Case workflow', () => {
   })
 
   test('review dialog opens and closes with Escape', async ({ page }) => {
-    await page.goto('/cases')
-    await page.getByRole('link').first().click()
+    await openFirstCase(page)
 
-    // Add a manual observable so Review is enabled
+    // Add a manual observable so Analyze is enabled
     await page.getByRole('tab', { name: /Overview/i }).click()
-    const reviewBtn = page.getByRole('button', { name: /Review/i })
+    const reviewBtn = page.getByRole('button', { name: /Analyze/i })
 
     // Only proceed if review is enabled (has manual items)
     const isDisabled = await reviewBtn.getAttribute('disabled')
@@ -124,7 +121,7 @@ test.describe('Case workflow', () => {
 
     // Dialog should appear
     await expect(page.getByRole('dialog')).toBeVisible()
-    await expect(page.getByText('Confirm review scope')).toBeVisible()
+    await expect(page.getByText('Choose analysis inputs')).toBeVisible()
 
     // Focus should be on Cancel button
     await expect(page.getByRole('button', { name: 'Cancel' })).toBeFocused()
@@ -135,8 +132,7 @@ test.describe('Case workflow', () => {
   })
 
   test('tab navigation works with keyboard', async ({ page }) => {
-    await page.goto('/cases')
-    await page.getByRole('link').first().click()
+    await openFirstCase(page)
 
     // Click the Notes tab
     const notesTab = page.getByRole('tab', { name: /Notes/i })

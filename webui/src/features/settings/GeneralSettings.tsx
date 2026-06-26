@@ -101,7 +101,7 @@ export default function GeneralSettings() {
       <div className="divide-y divide-border rounded-lg border border-border bg-surface">
         <Row label="Model Provider">
           {editing ? (
-            <Select {...register('model_provider')} className="flex-1">
+            <Select {...register('model_provider')} className="min-w-0 flex-1">
               <option value="anthropic">anthropic</option>
               <option value="ollama">ollama</option>
             </Select>
@@ -112,7 +112,7 @@ export default function GeneralSettings() {
 
         <Row label="Model">
           {editing ? (
-            <Select {...register('model')} className="flex-1" disabled={models.length === 0}>
+            <Select {...register('model')} className="min-w-0 flex-1" disabled={models.length === 0}>
               {models.length > 0
                 ? models.map(m => <option key={m} value={m}>{m}</option>)
                 : <option value="">No models found</option>
@@ -125,7 +125,7 @@ export default function GeneralSettings() {
 
         <Row label="Disclosure Mode">
           {editing ? (
-            <Select {...register('disclosure_mode')} className="flex-1">
+            <Select {...register('disclosure_mode')} className="min-w-0 flex-1">
               {DISCLOSURE_MODES.map(m => <option key={m} value={m}>{m}</option>)}
             </Select>
           ) : (
@@ -135,7 +135,7 @@ export default function GeneralSettings() {
 
         <Row label="Log Level">
           {editing ? (
-            <Select {...register('log_level')} className="flex-1">
+            <Select {...register('log_level')} className="min-w-0 flex-1">
               {LOG_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
             </Select>
           ) : (
@@ -146,7 +146,7 @@ export default function GeneralSettings() {
         {(editing ? provider === 'ollama' : settings.model_provider === 'ollama') && (
           <Row label="Ollama URL">
             {editing ? (
-              <Input {...register('ollama_base_url')} className="flex-1" />
+              <Input {...register('ollama_base_url')} className="min-w-0 flex-1" />
             ) : (
               <Mono>{settings.ollama_base_url || '—'}</Mono>
             )}
@@ -159,7 +159,7 @@ export default function GeneralSettings() {
           ['DB Path', settings.db_path],
         ] as const).map(([label, val]) => (
           <Row key={label} label={label}>
-            <span className="truncate font-mono text-sm text-muted-foreground">{val}</span>
+            <span className="min-w-0 break-all font-mono text-sm text-muted-foreground sm:truncate">{val}</span>
           </Row>
         ))}
       </div>
@@ -169,13 +169,13 @@ export default function GeneralSettings() {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-4 px-4 py-3">
-      <span className="w-40 shrink-0 text-sm text-muted-foreground">{label}</span>
-      {children}
+    <div className="flex flex-col gap-1.5 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
+      <span className="text-sm text-muted-foreground sm:w-40 sm:shrink-0">{label}</span>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   )
 }
 
 function Mono({ children }: { children: React.ReactNode }) {
-  return <span className="font-mono text-sm text-foreground">{children}</span>
+  return <span className="block min-w-0 break-all font-mono text-sm text-foreground">{children}</span>
 }

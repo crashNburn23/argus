@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { Eye, EyeOff } from 'lucide-react'
 import Button from '../../components/ui/Button'
 import { useSettings, useUpdateSettings } from './queries'
 
@@ -67,15 +68,17 @@ export default function ApiKeysSettings() {
           const configured = settings.api_keys_configured[statusKey] ?? false
           const isVisible = visible[field] ?? false
           return (
-            <div key={field} className="flex items-center gap-3 px-4 py-3">
-              <span className="w-36 shrink-0 text-sm text-muted-foreground">{label}</span>
-              <span
+            <div key={field} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3">
+              <div className="flex items-center justify-between gap-3 sm:w-52 sm:shrink-0 sm:justify-start">
+                <span className="text-sm text-muted-foreground sm:w-36">{label}</span>
+                <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
                   configured ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'
                 }`}
-              >
-                {configured ? 'set' : 'not set'}
-              </span>
+                >
+                  {configured ? 'set' : 'not set'}
+                </span>
+              </div>
               <div className="flex min-w-0 flex-1 items-center gap-1">
                 <input
                   type={isVisible ? 'text' : 'password'}
@@ -90,7 +93,7 @@ export default function ApiKeysSettings() {
                   className="shrink-0 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
                   aria-label={isVisible ? 'Hide key' : 'Show key'}
                 >
-                  {isVisible ? '🙈' : '👁'}
+                  {isVisible ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
                 </button>
               </div>
             </div>

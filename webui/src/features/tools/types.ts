@@ -10,3 +10,9 @@ export interface ToolFileContent {
   filename: string
   content: string
 }
+
+export interface ToolStatus {
+  name: string
+  available: boolean
+  reason?: string
+}

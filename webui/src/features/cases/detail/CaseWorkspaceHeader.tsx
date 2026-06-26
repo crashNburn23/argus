@@ -42,11 +42,11 @@ export default function CaseWorkspaceHeader({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h1 className="truncate text-lg font-semibold text-foreground">{caseData.title}</h1>
-            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">{caseData.case_id}</p>
+            <p className="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">{caseData.case_id}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button onClick={onReview} disabled={reviewableCount === 0} title={reviewableCount ? `Review ${reviewableCount} manually added items` : 'Add observables or notes first'}>
-              <ScanSearch className="size-4" aria-hidden="true" />Review ({reviewableCount})
+            <Button onClick={onReview} disabled={reviewableCount === 0} title={reviewableCount ? `Analyze ${reviewableCount} new analyst items` : 'Add observables or notes first'}>
+              <ScanSearch className="size-4" aria-hidden="true" />Analyze ({reviewableCount})
             </Button>
             <Select className="w-32" value={caseData.status} onChange={event => onStatusChange(event.target.value)} aria-label="Case status">
               {STATUS_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
@@ -54,10 +54,22 @@ export default function CaseWorkspaceHeader({
           </div>
         </div>
       </header>
+      <div className="shrink-0 border-b border-border bg-surface p-2 sm:hidden">
+        <label className="flex items-center gap-3">
+          <span className="shrink-0 pl-1 text-xs font-medium text-muted-foreground">Workspace</span>
+          <Select
+            aria-label="Case workspace section"
+            value={activeTab}
+            onChange={event => onTabChange(event.target.value as CaseTabId)}
+          >
+            {tabs.map(tab => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
+          </Select>
+        </label>
+      </div>
       <nav
         role="tablist"
         aria-label="Case workspace"
-        className="flex shrink-0 overflow-x-auto border-b border-border bg-surface px-2 sm:px-4"
+        className="hidden shrink-0 overflow-x-auto border-b border-border bg-surface px-4 sm:flex"
       >
         {tabs.map(tab => (
           <button

@@ -64,10 +64,10 @@ export default function ReviewScopeDialog({
       <div className="flex max-h-[85vh] w-full max-w-xl flex-col rounded-xl border border-border bg-surface shadow-2xl">
         <header className="border-b border-border p-5">
           <h2 id="review-title" className="font-semibold text-foreground">
-            Confirm review scope
+            Choose analysis inputs
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Select the analyst-provided material Argus should investigate.
+            Argus will enrich the selected material, identify relationships, and write sourced findings to Notes.
           </p>
         </header>
         <div className="flex-1 space-y-5 overflow-y-auto p-5">

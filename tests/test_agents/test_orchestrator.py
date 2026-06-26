@@ -116,6 +116,15 @@ async def test_orchestrator_loop_exhaustion_returns_fallback():
 
 
 @pytest.mark.asyncio
+async def test_orchestrator_empty_final_response_returns_visible_fallback():
+    orch = _make_orchestrator([FakeResponse(text="   ")])
+
+    result = await orch.run(user_query="blank answer")
+
+    assert "empty response" in result.lower()
+
+
+@pytest.mark.asyncio
 async def test_persistent_orchestrator_keeps_and_clears_conversation():
     orch = _make_orchestrator(
         [

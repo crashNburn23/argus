@@ -17,6 +17,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.patch_stdout import patch_stdout as _pt_patch_stdout
 from prompt_toolkit.styles import DynamicStyle, Style
 
+from argus.async_utils import run_sync
 from argus.cli.commands import (
     benchmark,
     case,
@@ -507,7 +508,8 @@ async def _classify_mid_run_input(new_text: str, active_query: str) -> str:
         from argus.llm.client import AnthropicClient, OllamaClient
 
         s = get_settings()
-        loop = asyncio.get_running_loop()
+        if s.model_provider == "anthropic" and not s.api_key("anthropic"):
+            return "background"
 
         def _call() -> str:
             client: Any
@@ -536,7 +538,7 @@ async def _classify_mid_run_input(new_text: str, active_query: str) -> str:
             text = resp.content[0].text.strip().lower() if resp.content else "background"
             return "extend" if text.startswith("extend") else "background"
 
-        return await loop.run_in_executor(None, _call)
+        return await run_sync(_call)
     except Exception:
         return "background"
 

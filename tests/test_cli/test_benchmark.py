@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 from typer.testing import CliRunner
 
 from argus.benchmarks.incidents import build_expected_report, get_incident_case
+from argus.benchmarks.reporting import build_reference_report, get_reporting_case
 from argus.cli.app import app
 from argus.reports.generator import ReportGenerator
 
@@ -16,6 +17,67 @@ def test_benchmark_lists_cases() -> None:
     assert result.exit_code == 0
     assert "IR-0001" in result.stdout
     assert "IR-0008" in result.stdout
+
+
+def test_benchmark_lists_pivot_cases() -> None:
+    result = CliRunner().invoke(app, ["benchmark", "pivot", "list"])
+
+    assert result.exit_code == 0
+    assert "PIVOT-0001" in result.stdout
+    assert "PIVOT-0003" in result.stdout
+
+
+def test_pivot_benchmark_run_requires_case_or_all() -> None:
+    result = CliRunner().invoke(app, ["benchmark", "pivot", "run"])
+
+    assert result.exit_code == 2
+    assert "Provide one CASE_ID or use --all" in result.stderr
+
+
+def test_benchmark_lists_reporting_cases() -> None:
+    result = CliRunner().invoke(app, ["benchmark", "report", "list"])
+
+    assert result.exit_code == 0
+    assert "REPORT-0001" in result.stdout
+    assert "REPORT-0004" in result.stdout
+
+
+def test_reporting_benchmark_run_requires_case_or_all() -> None:
+    result = CliRunner().invoke(app, ["benchmark", "report", "run"])
+
+    assert result.exit_code == 2
+    assert "Provide one CASE_ID or use --all" in result.stderr
+
+
+def test_reporting_benchmark_saves_baseline(tmp_path) -> None:
+    async def generate(case):
+        return build_reference_report(get_reporting_case(case.case_id))
+
+    baseline = tmp_path / "reporting-baseline.json"
+    with patch(
+        "argus.agents.case_report_agent.CaseReportAgent.generate",
+        new=AsyncMock(side_effect=generate),
+    ):
+        result = CliRunner().invoke(
+            app,
+            [
+                "benchmark",
+                "report",
+                "run",
+                "--all",
+                "--json",
+                "--output-dir",
+                str(tmp_path / "reports"),
+                "--save-baseline",
+                str(baseline),
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert baseline.exists()
+    payload = json.loads(baseline.read_text())
+    assert payload["suite"] == "cti_reporting"
+    assert payload["average_score"] == 1.0
 
 
 def test_benchmark_renders_reference_case(tmp_path) -> None:

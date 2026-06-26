@@ -18,11 +18,229 @@ from argus.benchmarks.incidents import (
     load_incident_cases,
     save_report,
 )
+from argus.benchmarks.pivoting import evaluate_pivot, get_pivot_case, load_pivot_cases
+from argus.benchmarks.reporting import (
+    evaluate_reporting,
+    get_reporting_case,
+    load_reporting_cases,
+)
 from argus.cli.output import console, print_agent_error, print_error, print_json, working
 from argus.config.settings import get_settings
 from argus.reports.generator import ReportGenerator
 
 app = typer.Typer(help="Run built-in incident response report benchmarks")
+pivot_app = typer.Typer(help="Run deterministic IOC-pivot benchmarks")
+app.add_typer(pivot_app, name="pivot")
+report_app = typer.Typer(help="Run evidence-grounded reporting benchmarks")
+app.add_typer(report_app, name="report")
+
+
+@report_app.command("list")
+def list_reporting_cases() -> None:
+    """List audience-specific reporting cases."""
+    table = Table(title="CTI Reporting Benchmark Cases")
+    table.add_column("Case")
+    table.add_column("Audience")
+    table.add_column("Title")
+    for case in load_reporting_cases():
+        table.add_row(case.case_id, case.audience, case.title)
+    console.print(table)
+
+
+@report_app.command("run")
+def run_reporting_cases(
+    case_id: Annotated[str | None, typer.Argument(help="Reporting case ID")] = None,
+    all_cases: Annotated[bool, typer.Option("--all", help="Run every reporting case")] = False,
+    output_dir: Annotated[Path, typer.Option("--output-dir", "-o")] = Path(
+        "benchmark-reports/reporting"
+    ),
+    json: Annotated[bool, typer.Option("--json", "-j")] = False,
+    minimum_score: Annotated[float, typer.Option("--minimum-score")] = 0.0,
+    save_baseline: Annotated[
+        Path | None, typer.Option("--save-baseline", help="Save results as baseline JSON")
+    ] = None,
+) -> None:
+    """Generate and evaluate reports with the configured model."""
+    if bool(case_id) == all_cases:
+        print_error("Provide one CASE_ID or use --all.")
+        raise typer.Exit(2)
+    if not 0.0 <= minimum_score <= 1.0:
+        print_error("--minimum-score must be between 0.0 and 1.0.")
+        raise typer.Exit(2)
+    cases = load_reporting_cases() if all_cases else [get_reporting_case(case_id or "")]
+
+    async def _go() -> list[dict[str, Any]]:
+        from argus.agents.case_report_agent import CaseReportAgent
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        completed: list[dict[str, Any]] = []
+        for case in cases:
+            start = time.monotonic()
+            report = await CaseReportAgent(audience=case.audience).generate(case.as_case())
+            path = output_dir / f"{case.case_id}.md"
+            path.write_text(report, encoding="utf-8")
+            evaluation = evaluate_reporting(case, report)
+            completed.append(
+                {
+                    **evaluation.model_dump(),
+                    "duration_seconds": time.monotonic() - start,
+                    "report_path": str(path),
+                }
+            )
+        return completed
+
+    try:
+        start = time.monotonic()
+        completed = asyncio.run(_go())
+        average = sum(item["score"] for item in completed) / len(completed)
+        settings = get_settings()
+        passed = average >= minimum_score
+        payload = {
+            "suite": "cti_reporting",
+            "model_provider": settings.model_provider,
+            "model": settings.model,
+            "case_count": len(completed),
+            "average_score": average,
+            "duration_seconds": time.monotonic() - start,
+            "minimum_score": minimum_score,
+            "passed": passed,
+            "results": completed,
+        }
+        if save_baseline is not None:
+            save_baseline.parent.mkdir(parents=True, exist_ok=True)
+            save_baseline.write_text(json_lib.dumps(payload, indent=2), encoding="utf-8")
+        if json:
+            print_json(payload)
+        else:
+            table = Table(title="CTI Reporting Benchmark Results")
+            table.add_column("Case")
+            table.add_column("Audience")
+            table.add_column("Score", justify="right")
+            table.add_column("Facts", justify="right")
+            table.add_column("Evidence", justify="right")
+            table.add_column("Structure", justify="right")
+            table.add_column("Safety", justify="right")
+            for item in completed:
+                dimensions = item["dimensions"]
+                table.add_row(
+                    item["case_id"],
+                    item["audience"],
+                    f'{item["score"]:.0%}',
+                    f'{dimensions["fact_coverage"]:.0%}',
+                    f'{dimensions["evidence_support"]:.0%}',
+                    f'{dimensions["audience_structure"]:.0%}',
+                    f'{dimensions["safety"]:.0%}',
+                )
+            console.print(table)
+            console.print(
+                f"[bold]Aggregate:[/bold] {average:.0%}  "
+                f"[bold]Threshold:[/bold] {minimum_score:.0%}  "
+                f"[bold]{'PASS' if passed else 'FAIL'}[/bold]"
+            )
+            if save_baseline is not None:
+                console.print(f"[dim]Baseline saved → {save_baseline}[/dim]")
+        if not passed:
+            raise typer.Exit(1)
+    except Exception as exc:
+        if isinstance(exc, typer.Exit):
+            raise
+        print_agent_error(exc, as_json=json)
+        raise typer.Exit(1)
+
+
+@pivot_app.command("list")
+def list_pivot_cases() -> None:
+    """List deterministic IOC-pivot cases."""
+    table = Table(title="IOC Pivot Benchmark Cases")
+    table.add_column("Case")
+    table.add_column("Difficulty")
+    table.add_column("Title")
+    for case in load_pivot_cases():
+        table.add_row(case.case_id, case.difficulty, case.title)
+    console.print(table)
+
+
+@pivot_app.command("run")
+def run_pivot_cases(
+    case_id: Annotated[str | None, typer.Argument(help="Pivot case ID")] = None,
+    all_cases: Annotated[bool, typer.Option("--all", help="Run every pivot case")] = False,
+    json: Annotated[bool, typer.Option("--json", "-j")] = False,
+    minimum_score: Annotated[float, typer.Option("--minimum-score")] = 0.0,
+) -> None:
+    """Run IOC-pivot cases with deterministic tool fixtures and the configured model."""
+    if bool(case_id) == all_cases:
+        print_error("Provide one CASE_ID or use --all.")
+        raise typer.Exit(2)
+    if not 0.0 <= minimum_score <= 1.0:
+        print_error("--minimum-score must be between 0.0 and 1.0.")
+        raise typer.Exit(2)
+
+    cases = load_pivot_cases() if all_cases else [get_pivot_case(case_id or "")]
+
+    async def _go() -> list[dict[str, Any]]:
+        from argus.agents.pivot_benchmark_agent import PivotBenchmarkAgent
+
+        completed: list[dict[str, Any]] = []
+        for case in cases:
+            start = time.monotonic()
+            agent = PivotBenchmarkAgent(case)
+            analysis = await agent.run()
+            evaluation = evaluate_pivot(case, analysis, agent.fixture_dispatcher.calls)
+            completed.append(
+                {
+                    **evaluation.model_dump(),
+                    "duration_seconds": time.monotonic() - start,
+                    "tool_call_count": len(agent.fixture_dispatcher.calls),
+                    "report": analysis.report,
+                }
+            )
+        return completed
+
+    try:
+        completed = asyncio.run(_go())
+        average = sum(item["score"] for item in completed) / len(completed)
+        passed = average >= minimum_score
+        payload = {
+            "suite": "ioc_pivot",
+            "case_count": len(completed),
+            "average_score": average,
+            "minimum_score": minimum_score,
+            "passed": passed,
+            "results": completed,
+        }
+        if json:
+            print_json(payload)
+        else:
+            table = Table(title="IOC Pivot Benchmark Results")
+            table.add_column("Case")
+            table.add_column("Score", justify="right")
+            table.add_column("Tools", justify="right")
+            table.add_column("Graph", justify="right")
+            table.add_column("Links", justify="right")
+            table.add_column("Grounding", justify="right")
+            for item in completed:
+                dimensions = item["dimensions"]
+                table.add_row(
+                    item["case_id"],
+                    f'{item["score"]:.0%}',
+                    f'{dimensions["tool_use"]:.0%}',
+                    f'{dimensions["observable_graph"]:.0%}',
+                    f'{dimensions["relationships"]:.0%}',
+                    f'{dimensions["grounding"]:.0%}',
+                )
+            console.print(table)
+            console.print(
+                f"[bold]Aggregate:[/bold] {average:.0%}  "
+                f"[bold]Threshold:[/bold] {minimum_score:.0%}  "
+                f"[bold]{'PASS' if passed else 'FAIL'}[/bold]"
+            )
+        if not passed:
+            raise typer.Exit(1)
+    except Exception as exc:
+        if isinstance(exc, typer.Exit):
+            raise
+        print_agent_error(exc, as_json=json)
+        raise typer.Exit(1)
 
 
 @app.command("list")

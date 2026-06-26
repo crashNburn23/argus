@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from argus.agents.errors import AgentError, AgentFailureCategory
+from argus.async_utils import run_sync
 from argus.config.settings import get_settings
 from argus.llm import create_llm_client
 from argus.storage.database import get_session
@@ -53,7 +54,12 @@ def _llm_call_sync(fn: Any, **kwargs: Any) -> Any:
 
 async def _llm_call_with_retry(fn: Any, **kwargs: Any) -> Any:
     """Wrap a sync LLM client call with retry on ReadTimeout (load-balancer idle drops)."""
-    return await asyncio.to_thread(_llm_call_sync, fn, **kwargs)
+    # Do not use asyncio's process-wide default executor here. Some combinations of
+    # native dependencies leave its idle worker waiting during event-loop shutdown,
+    # which makes short-lived CLI commands and test processes hang after completion.
+    # A call-scoped executor has deterministic cleanup; model network latency dwarfs
+    # the cost of creating its single worker.
+    return await run_sync(_llm_call_sync, fn, **kwargs)
 
 
 class BaseAgent(ABC):

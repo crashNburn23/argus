@@ -55,9 +55,12 @@ export default function CaseChat({ caseId }: { caseId: string }) {
         })
       } else if (msg.type === 'result') {
         progressRef.current = ''
+        const content = msg.text.trim()
         setMessages(prev => [
           ...prev.filter(m => !m.streaming),
-          { role: 'assistant', content: msg.text },
+          content
+            ? { role: 'assistant', content }
+            : { role: 'system', content: 'Argus completed, but no response text was returned.' },
         ])
         setRunning(false)
         void queryClient.invalidateQueries({ queryKey: caseDetailKey(caseId) })
