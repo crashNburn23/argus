@@ -125,7 +125,7 @@ async def chat_ws(websocket: WebSocket) -> None:
                     result = _visible_result_text(await orchestrator.run(user_query=q))
                     if "no response text" in result:
                         log.warning("chat_ws.empty_result")
-                    log.info("chat_ws.result", result_bytes=len(result), mode=m, case_id=cid)
+                    log.info("chat_ws.result result_bytes=%d mode=%s case_id=%s", len(result), m, cid)
                     await queue.put({"type": "result", "text": result})
 
                     if m == "case" and cid:
