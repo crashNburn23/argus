@@ -8,6 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from argus.config.settings import Settings, get_settings
+from argus.disclosure import external_collection_allowed, external_collection_block_reason
 
 
 class DiagnosticCheck(BaseModel):
@@ -99,6 +100,29 @@ def _model_checks(settings: Settings, check_connectivity: bool) -> list[Diagnost
 
 
 def _source_checks(settings: Settings) -> list[DiagnosticCheck]:
+    if not external_collection_allowed(settings):
+        blocked_detail = external_collection_block_reason(settings)
+        return [
+            DiagnosticCheck(
+                category="source",
+                name=name,
+                status="blocked",
+                detail=blocked_detail,
+            )
+            for name in (
+                "VirusTotal",
+                "Shodan",
+                "Recorded Future",
+                "AlienVault OTX",
+                "AbuseIPDB",
+                "MITRE ATT&CK",
+                "NVD / CISA KEV",
+                "URLhaus",
+                "Web search",
+                "MISP",
+            )
+        ]
+
     keyed_sources = {
         "VirusTotal": "virustotal",
         "Shodan": "shodan",

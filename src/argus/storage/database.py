@@ -43,6 +43,10 @@ def _migrate(engine: Engine) -> None:
             )
         if "error_category" not in existing:
             conn.execute(text("ALTER TABLE agent_run_records ADD COLUMN error_category TEXT"))
+        if "ledger_json" not in existing:
+            conn.execute(
+                text("ALTER TABLE agent_run_records ADD COLUMN ledger_json TEXT DEFAULT '{}'")
+            )
         conn.commit()
 
 

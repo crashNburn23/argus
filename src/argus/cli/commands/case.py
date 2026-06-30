@@ -13,6 +13,7 @@ import typer
 from rich.table import Table
 
 from argus.cli.output import console, print_error, print_json
+from argus.disclosure import external_collection_allowed
 from argus.ingestion.extractors import extract_observables
 from argus.models.case import PIR, Case, CaseNote, ReportArtifact
 from argus.models.evidence import (
@@ -661,6 +662,9 @@ async def _run_enrichment(
     from argus.config.settings import get_settings
 
     settings = get_settings()
+    if not external_collection_allowed(settings):
+        return []
+
     vt_key = settings.api_key("virustotal")
     shodan_key = settings.api_key("shodan")
     abuseipdb_key = settings.api_key("abuseipdb")
@@ -1053,7 +1057,11 @@ async def _run_pivots(
 ) -> tuple[list[Observable], list[EvidenceItem], list[Relationship]]:
     from argus.config.settings import get_settings
 
-    vt_key = get_settings().api_key("virustotal")
+    settings = get_settings()
+    if not external_collection_allowed(settings):
+        return [], [], []
+
+    vt_key = settings.api_key("virustotal")
 
     all_tasks: list[tuple[Observable, str, Any]] = []
 
@@ -1620,6 +1628,13 @@ def analyze_case(
         bool,
         typer.Option("--review/--no-review", help="Run ReviewAgent to check grounding"),
     ] = False,
+    plan: Annotated[
+        bool,
+        typer.Option(
+            "--plan/--no-plan",
+            help="Generate a pre-report claim plan and prompt for approval before synthesizing",
+        ),
+    ] = False,
     json: Annotated[
         bool, typer.Option("--json", "-j", help="Output report artifact as JSON")
     ] = False,
@@ -1646,14 +1661,46 @@ def analyze_case(
         print_error("No evidence in case — run 'case extract' and 'case enrich' first")
         raise typer.Exit(1)
 
+    agent = CaseReportAgent(audience=audience, progress=status)
+
+    if plan:
+        try:
+            with thinking("planning claims from evidence"):
+                report_plan = asyncio.run(agent.plan(case))
+        except Exception as exc:
+            from argus.cli.output import print_agent_error
+
+            print_agent_error(exc, as_json=json)
+            raise typer.Exit(1)
+
+        console.print(f"\n[bold]Pre-report plan[/bold] ({len(report_plan.proposed_claims)} claims)")
+        console.print(f"[dim]{report_plan.summary}[/dim]\n")
+        for i, claim in enumerate(report_plan.proposed_claims, 1):
+            ev_ids = " ".join(f"[{e}]" for e in claim.evidence_ids) if claim.evidence_ids else ""
+            inf = " [dim](inferred)[/dim]" if claim.is_inference else ""
+            conf = f"[dim]{claim.confidence:.0%}[/dim]"
+            console.print(f"  {i:2d}. {claim.claim}{inf} {conf} {ev_ids}")
+        if report_plan.known_gaps:
+            console.print("\n[yellow]Gaps:[/yellow]")
+            for gap in report_plan.known_gaps:
+                console.print(f"  - {gap}")
+        if report_plan.forbidden_assertions:
+            console.print("\n[cp.red]Must not assert:[/cp.red]")
+            for forbidden in report_plan.forbidden_assertions:
+                console.print(f"  - {forbidden}")
+        console.print()
+        proceed = typer.confirm("Proceed with report generation?", default=True)
+        if not proceed:
+            console.print("[dim]Report generation cancelled.[/dim]")
+            raise typer.Exit(0)
+
     try:
         with thinking(f"synthesizing {audience} report for {case.title}"):
-            agent = CaseReportAgent(audience=audience, progress=status)
             content = asyncio.run(agent.generate(case))
     except Exception as exc:
         from argus.cli.output import print_agent_error
 
-        print_agent_error(exc)
+        print_agent_error(exc, as_json=json)
         raise typer.Exit(1)
 
     review_metadata: dict[str, Any] = {}
@@ -1699,7 +1746,7 @@ def analyze_case(
         except Exception as exc:
             from argus.cli.output import print_agent_error
 
-            print_agent_error(exc)
+            print_agent_error(exc, as_json=json)
 
     report_artifact = ReportArtifact(
         report_type=audience,

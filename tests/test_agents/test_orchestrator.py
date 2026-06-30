@@ -100,6 +100,63 @@ async def test_orchestrator_unknown_agent_returns_error():
     assert "handled" in result
 
 
+def test_orchestrator_extracts_report_iocs_and_filters_source_domain():
+    text = """
+    Blackpoint Cyber's Adversary Pursuit Group identified TaskWeaver and Djinn Stealer.
+    C2: hxxps://djinn-api[.]example[.]top/gate
+    Staging: *.cdn-stage[.]example[.]top
+    Exfil endpoint: 45.67.89.10:443
+    SHA256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    Publisher link: https://blackpointcyber.com/blog/a-djinn-in-the-machine/
+    Filename: package.json
+    """
+
+    extracted = CTIOrchestrator._extract_iocs_from_text(
+        text,
+        "https://blackpointcyber.com/blog/a-djinn-in-the-machine/",
+    )
+
+    assert extracted["ips"] == ["45.67.89.10"]
+    assert extracted["ip_ports"] == ["45.67.89.10:443"]
+    assert "djinn-api.example.top" in extracted["domains"]
+    assert "cdn-stage.example.top" in extracted["domains"]
+    assert "blackpointcyber.com" not in extracted["domains"]
+    assert "package.json" not in extracted["domains"]
+    assert extracted["hashes"] == [
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    ]
+    assert extracted["urls"] == ["https://djinn-api.example.top/gate"]
+
+
+@pytest.mark.asyncio
+async def test_case_analysis_agent_receives_urls_hashes_and_ip_ports():
+    case_agent = MagicMock()
+    case_agent.run = AsyncMock(return_value="analysis")
+    orch = _make_orchestrator([])
+    orch._agents = {"case_analysis_agent": case_agent}
+
+    result = await orch._invoke_agent(
+        "case_analysis_agent",
+        {
+            "context": "TaskWeaver intrusion chain",
+            "ips": ["45.67.89.10"],
+            "ip_ports": ["45.67.89.10:443"],
+            "domains": ["djinn-api.example.top"],
+            "hashes": [
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            ],
+            "urls": ["https://djinn-api.example.top/gate"],
+        },
+    )
+
+    assert result == "analysis"
+    query = case_agent.run.call_args.kwargs["query"]
+    assert "45.67.89.10:443" in query
+    assert "djinn-api.example.top" in query
+    assert "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" in query
+    assert "https://djinn-api.example.top/gate" in query
+
+
 @pytest.mark.asyncio
 async def test_orchestrator_loop_exhaustion_returns_fallback():
     """If model keeps calling tools without end_turn, we get the fallback string."""

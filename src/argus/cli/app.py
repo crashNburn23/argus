@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shlex
 from collections.abc import Generator
 from pathlib import Path
@@ -617,20 +618,35 @@ async def _handle_slash(
                 print_agent_error(exc)
 
     elif verb == "/model":
-        from argus.cli.commands.model import list_ollama_models, persist_model
+        from argus.cli.commands.model import (
+            add_capability_row,
+            capability_summary,
+            list_ollama_models,
+            persist_model,
+        )
         from argus.config.settings import get_settings
+        from argus.llm.capabilities import model_capabilities
 
         s = get_settings()
         if not args or args[0] == "list":
+            current = model_capabilities(s.model_provider, s.model)
             console.print(f"Current: [bold]{s.model_provider}[/bold] / [bold]{s.model}[/bold]")
+            console.print(f"Capabilities: {capability_summary(s.model_provider, s.model)}")
+            if current.cautions:
+                console.print(f"[yellow]Caution:[/yellow] {current.caution_summary}")
             try:
                 models = list_ollama_models(s.ollama_base_url)
                 from rich.table import Table
 
                 t = Table(title="Local Ollama Models")
                 t.add_column("Model")
+                t.add_column("Tools")
+                t.add_column("Structured")
+                t.add_column("Context")
+                t.add_column("Recommended")
+                t.add_column("Notes")
                 for m in models:
-                    t.add_row(f"[bold cyan]{m}[/bold cyan]" if m == s.model else m)
+                    add_capability_row(t, "ollama", m)
                 console.print(t)
             except Exception as exc:
                 console.print(f"[dim]Ollama unavailable: {exc}[/dim]")
@@ -648,6 +664,7 @@ async def _handle_slash(
                 return True
             persist_model("ollama", name)
             console.print(f"Switched to [bold cyan]{name}[/bold cyan]")
+            console.print(f"Capabilities: {capability_summary('ollama', name)}")
 
     elif verb == "/theme":
         from rich.table import Table as _Table
@@ -660,7 +677,7 @@ async def _handle_slash(
         )
 
         if not args or args[0] == "list":
-            current = get_theme()
+            current_theme = get_theme()
             t = _Table(
                 title="[cp.cyan]Themes[/cp.cyan]",
                 show_header=True,
@@ -670,7 +687,7 @@ async def _handle_slash(
             t.add_column("Name", style="cp.cyan", width=12)
             t.add_column("Description")
             for nm in get_theme_names():
-                marker = "  [cp.magenta]◀ active[/cp.magenta]" if nm == current else ""
+                marker = "  [cp.magenta]◀ active[/cp.magenta]" if nm == current_theme else ""
                 t.add_row(nm, THEME_DESCRIPTIONS.get(nm, "") + marker)
             console.print(t)
         else:
@@ -870,17 +887,25 @@ async def _handle_slash(
                 t.add_column("Agent")
                 t.add_column("Status")
                 t.add_column("Tokens", justify="right")
+                t.add_column("Steps", justify="right")
                 t.add_column("Duration", justify="right")
                 for row in rows:
                     time_str = row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else ""
                     tokens = str(row.input_tokens + row.output_tokens)
                     duration = f"{row.duration_seconds:.1f}s"
+                    try:
+                        ledger = json.loads(row.ledger_json or "{}")
+                        steps = ledger.get("steps", [])
+                        step_count = str(len(steps)) if isinstance(steps, list) else "0"
+                    except Exception:
+                        step_count = "0"
                     status_style = "cp.green" if row.status == "success" else "cp.amber"
                     t.add_row(
                         time_str,
                         row.agent_name,
                         f"[{status_style}]{row.status}[/{status_style}]",
                         tokens,
+                        step_count,
                         duration,
                     )
                 console.print(t)
@@ -959,15 +984,25 @@ def _show_disclosure_warning() -> None:
         return
     if s.disclosure_mode == "local-only" and s.model_provider != "ollama":
         console.print(
-            "[yellow]⚠ DATA_DISCLOSURE_MODE=local-only but model provider is "
+            "[yellow]DISCLOSURE_MODE=local-only but model provider is "
             f"'{s.model_provider}' — data will be sent to an external hosted API. "
-            "Switch to Ollama or set DATA_DISCLOSURE_MODE=unrestricted.[/yellow]"
+            "Switch to Ollama or set DISCLOSURE_MODE=unrestricted.[/yellow]"
         )
     elif s.disclosure_mode == "confirm-external":
         console.print(
             "[cp.dim]Data-disclosure mode: confirm-external — "
             "you will be prompted before each agent run.[/cp.dim]"
         )
+
+
+def _confirm_external_sync() -> bool:
+    """Prompt before sending user input externally when confirm-external is active."""
+    from argus.config.settings import get_settings
+
+    s = get_settings()
+    if s.disclosure_mode != "confirm-external":
+        return True
+    return typer.confirm(f"Send query to {s.model_provider}?", default=False)
 
 
 def _show_first_run_guidance() -> None:
@@ -1028,6 +1063,9 @@ async def _interactive_loop() -> None:
             if line.startswith("/"):
                 if not await _handle_slash(line, orchestrator, session_state):
                     break
+                continue
+            if not _confirm_external_sync():
+                console.print("[cp.dim]Cancelled.[/cp.dim]")
                 continue
             try:
                 with thinking("argus is thinking"):

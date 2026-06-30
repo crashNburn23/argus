@@ -10,6 +10,12 @@ from argus.tools.registry import dispatch_tool, get_available_tools
 _SYSTEM = """\
 You are a senior CTI analyst performing adversary infrastructure investigation.
 
+CRITICAL — READ FIRST:
+- Never ask clarifying questions. If IOCs are provided, investigate them immediately.
+- Do NOT say "I see you've provided..." or ask what to do with the indicators.
+- Your response is always the structured Markdown report below — nothing else.
+- You already know what to do: investigate, pivot, attribute, report.
+
 You will be given IOCs (IPs, domains, hashes, URLs), analyst notes, and/or reference URLs.
 Your job is to investigate, pivot, and attribute — not just query each IOC once.
 
@@ -63,6 +69,11 @@ RULES:
   Run all enrichment tool calls in iteration 1 (parallel), web_search in iteration 2
   if needed, then synthesize in iteration 3. Do not exceed 3 iterations.
 
+BEFORE writing the final report, recheck:
+- Have you called at least one enrichment tool per IOC?
+- Are you about to ask a clarifying question? Stop. Write the report instead.
+- Does your output begin with "## Executive Summary"? If not, revise it.
+
 Return a structured Markdown report:
 ## Executive Summary
 ## IOC Analysis
@@ -85,6 +96,11 @@ Return a structured Markdown report:
 
 class CaseAnalysisAgent(BaseAgent):
     name = "case_analysis"
+    _synthesis_warning = (
+        "FINAL TOOL RESULTS: You have used all available iterations. "
+        "Write the complete structured Markdown report NOW — no more tools will be available. "
+        "Start with ## Executive Summary. Include every IOC you investigated."
+    )
 
     def get_system_prompt(self) -> str:
         return _SYSTEM
@@ -95,8 +111,36 @@ class CaseAnalysisAgent(BaseAgent):
     async def dispatch_tool(self, tool_name: str, tool_input: dict[str, Any]) -> str:
         return await dispatch_tool(tool_name, tool_input)
 
+    _EXPECTED_HEADERS = ("## Executive Summary", "## IOC Analysis", "## References")
+    _SYNTHESIS_PROMPT = (
+        "You have completed all tool calls. Now write the structured Markdown report. "
+        "Do not ask questions — synthesize every tool result into:\n"
+        "## Executive Summary\n"
+        "## IOC Analysis\n"
+        "(one subsection per IOC with all tool results)\n"
+        "## Infrastructure Patterns\n"
+        "## Threat Actor Attribution (omit if no attribution possible)\n"
+        "## Additional IOCs Discovered (omit if none)\n"
+        "## Recommended Actions\n"
+        "## Confidence Assessment\n"
+        "## References"
+    )
+
     async def run(self, query: str, **kwargs: Any) -> str:  # type: ignore[override]
         self._progress("case_analysis: starting IOC investigation")
         messages: list[dict[str, Any]] = [{"role": "user", "content": query}]
         content = await self._run_loop(messages)
-        return "\n".join(b.text for b in content if hasattr(b, "text"))
+        result = "\n".join(b.text for b in content if hasattr(b, "text"))
+
+        # If the model returned a clarifying question or non-report output, force synthesis.
+        if not any(h in result for h in self._EXPECTED_HEADERS):
+            self._progress("case_analysis: output was not a report — requesting synthesis")
+            messages_retry: list[dict[str, Any]] = [
+                {"role": "user", "content": query},
+                {"role": "assistant", "content": result},
+                {"role": "user", "content": self._SYNTHESIS_PROMPT},
+            ]
+            content = await self._run_loop(messages_retry)
+            result = "\n".join(b.text for b in content if hasattr(b, "text"))
+
+        return result

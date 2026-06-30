@@ -1,4 +1,4 @@
-"""Integration tests for ThreatActorAgent, VulnIntelAgent, and TriageAgent.
+"""Integration tests for ThreatActorAgent, VulnIntelAgent, TriageAgent, and CaseAnalysisAgent.
 
 Uses FakeLLMClient from test_base_agent.py pattern — no live LLM calls.
 """
@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from argus.agents.case_analysis_agent import CaseAnalysisAgent
 from argus.agents.threat_actor_agent import ThreatActorAgent
 from argus.agents.triage_agent import TriageAgent
 from argus.agents.vuln_agent import VulnIntelAgent
@@ -236,3 +237,52 @@ async def test_triage_agent_raises_on_invalid_json() -> None:
     agent = _patch_agent(TriageAgent, [FakeResponse(text="null")])
     with pytest.raises(AgentError):
         await agent.run(alerts=[_TRIAGE_ALERT])
+
+
+# ---------------------------------------------------------------------------
+# CaseAnalysisAgent — synthesis recovery
+# ---------------------------------------------------------------------------
+
+
+_GOOD_REPORT = (
+    "## Executive Summary\n\nThe IP 203.0.113.5 is malicious.\n\n"
+    "## IOC Analysis\n\n### 203.0.113.5\nAbuseIPDB: abuse score 87.\n\n"
+    "## References\n\nNo external sources needed."
+)
+
+_CLARIFYING_QUESTION = (
+    "I see you've provided a list of domains. Could you let me know what you'd like to do "
+    "with them—for example, check their reputation or look up related information?"
+)
+
+
+@pytest.mark.asyncio
+async def test_case_analysis_returns_report_when_model_answers_correctly() -> None:
+    """When the model returns a proper report, run() passes it through unchanged."""
+    agent = _patch_agent(CaseAnalysisAgent, [FakeResponse(text=_GOOD_REPORT)])
+    result = await agent.run(query="Investigate 203.0.113.5")
+    assert "## Executive Summary" in result
+    assert "## IOC Analysis" in result
+    # Only one LLM call — no retry needed
+    assert len(agent.client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_case_analysis_recovers_from_clarifying_question() -> None:
+    """When the model asks a clarifying question instead of reporting, run() retries
+    with an explicit synthesis prompt and returns the second response."""
+    agent = _patch_agent(
+        CaseAnalysisAgent,
+        [
+            FakeResponse(text=_CLARIFYING_QUESTION),  # bad first response
+            FakeResponse(text=_GOOD_REPORT),           # recovery response
+        ],
+    )
+    result = await agent.run(query="Investigate 203.0.113.5")
+    assert "## Executive Summary" in result
+    # Two LLM calls: initial + synthesis retry
+    assert len(agent.client.calls) == 2
+    # The retry message should include the synthesis prompt
+    retry_messages = agent.client.calls[1]["messages"]
+    all_content = str(retry_messages)
+    assert "Executive Summary" in all_content or "synthesis" in all_content.lower()

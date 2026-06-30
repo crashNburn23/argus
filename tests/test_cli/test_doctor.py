@@ -76,3 +76,17 @@ def test_doctor_includes_disclosure_check(monkeypatch) -> None:
     result = CliRunner().invoke(app, ["doctor", "--json", "--no-connectivity"])
     payload = json.loads(result.stdout)
     assert any(c["name"] == "data-disclosure" for c in payload["checks"])
+
+
+def test_doctor_marks_sources_blocked_in_local_only(monkeypatch) -> None:
+    monkeypatch.setenv("DISCLOSURE_MODE", "local-only")
+    monkeypatch.setenv("MODEL_PROVIDER", "ollama")
+    get_settings.cache_clear()
+
+    result = CliRunner().invoke(app, ["doctor", "--json", "--no-connectivity"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    source_checks = [c for c in payload["checks"] if c["category"] == "source"]
+    assert source_checks
+    assert {c["status"] for c in source_checks} == {"blocked"}

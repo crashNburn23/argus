@@ -20,6 +20,18 @@ def ask(
 ) -> None:
     """Ask a threat intelligence question (routes to appropriate agents automatically)."""
     from argus.agents.orchestrator import CTIOrchestrator
+    from argus.config.settings import get_settings
+
+    settings = get_settings()
+    if settings.disclosure_mode == "confirm-external" and not typer.confirm(
+        f"Send query to {settings.model_provider}?",
+        default=False,
+    ):
+        if json:
+            print(json_lib.dumps({"cancelled": True}))
+        else:
+            typer.echo("Cancelled.")
+        return
 
     async def _go() -> Any:
         progress = status if not json else None

@@ -10,12 +10,12 @@ export const caseDetailApi = {
     api.post<CaseDetailData>(`${casePath(caseId)}/observables`, { observables }),
   addNote: (caseId: string, body: string) =>
     api.post<CaseDetailData>(`${casePath(caseId)}/notes`, { body, manually_added: true }),
-  updateNote: (caseId: string, noteId: string, body: string) =>
-    api.patch<CaseDetailData>(`${casePath(caseId)}/notes/${encodeURIComponent(noteId)}`, { body }),
+  updateNote: (caseId: string, noteId: string, patch: { body?: string; analyst_review?: string }) =>
+    api.patch<CaseDetailData>(`${casePath(caseId)}/notes/${encodeURIComponent(noteId)}`, patch),
   deleteNote: (caseId: string, noteId: string) =>
     api.delete<CaseDetailData>(`${casePath(caseId)}/notes/${encodeURIComponent(noteId)}`),
-  reanalyzeNote: (caseId: string, noteId: string) =>
-    api.post<CaseDetailData>(`${casePath(caseId)}/notes/${encodeURIComponent(noteId)}/reanalyze`),
+  reanalyzeNote: (caseId: string, noteId: string, feedback?: string) =>
+    api.post<CaseDetailData>(`${casePath(caseId)}/notes/${encodeURIComponent(noteId)}/reanalyze`, feedback ? { feedback } : {}),
   submitFeedback: (caseId: string, noteId: string, correct: boolean, correction: string) =>
     api.post<{ saved: boolean }>(`${casePath(caseId)}/notes/${encodeURIComponent(noteId)}/feedback`, { correct, correction }),
   review: (caseId: string, input: { observable_ids: string[]; note_ids: string[]; reference_ids: string[] }) =>

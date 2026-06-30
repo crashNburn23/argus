@@ -8,10 +8,13 @@ from typing import Any
 
 import pytest
 from pydantic import BaseModel
+from sqlalchemy import desc, select
 
 from argus.agents.base import BaseAgent
 from argus.agents.errors import AgentError, AgentFailureCategory
 from argus.llm.client import LLMResponse, TextBlock, ToolUseBlock, Usage
+from argus.storage.database import get_session
+from argus.storage.models_db import AgentRunRecord
 
 # ---------------------------------------------------------------------------
 # Fake LLM infrastructure
@@ -88,6 +91,13 @@ def _make_agent(responses: list[FakeResponse]) -> _SimpleAgent:
     return agent
 
 
+def _latest_agent_run() -> AgentRunRecord:
+    with get_session() as session:
+        return session.execute(
+            select(AgentRunRecord).order_by(desc(AgentRunRecord.id)).limit(1)
+        ).scalar_one()
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -100,6 +110,34 @@ async def test_run_structured_success():
     result = await agent._run_structured("do something", _SimpleResult)
     assert result.value == "hello"
     assert result.score == 42
+
+
+@pytest.mark.asyncio
+async def test_run_structured_passes_response_format_schema():
+    payload = json.dumps({"value": "hello", "score": 42})
+    agent = _make_agent([FakeResponse(text=payload)])
+
+    await agent._run_structured("do something", _SimpleResult)
+
+    schema = agent.client.calls[0]["response_format"]  # type: ignore[union-attr]
+    assert schema["type"] == "object"
+    assert "value" in schema["properties"]
+
+
+@pytest.mark.asyncio
+async def test_run_structured_persists_success_ledger():
+    payload = json.dumps({"value": "hello", "score": 42})
+    agent = _make_agent([FakeResponse(text=payload)])
+
+    await agent._run_structured("do something", _SimpleResult)
+
+    ledger = json.loads(_latest_agent_run().ledger_json)
+    assert ledger["agent"] == "test_agent"
+    assert ledger["goal"] == "do something"
+    assert any(
+        step["step"] == "model_iteration" and step["status"] == "completed"
+        for step in ledger["steps"]
+    )
 
 
 @pytest.mark.asyncio
@@ -171,6 +209,43 @@ async def test_loop_exhaustion_raises_agent_error():
 
 
 @pytest.mark.asyncio
+async def test_loop_drops_tools_on_final_iteration():
+    """On the last iteration, tools are omitted from kwargs so the model must produce text."""
+    from argus.agents.base import MAX_LOOP_ITERATIONS
+
+    _TOOL_DEF = [
+        {"name": "noop", "description": "x", "input_schema": {"type": "object", "properties": {}}}
+    ]
+
+    class _ToolAgent(_SimpleAgent):
+        def get_tool_definitions(self):
+            return _TOOL_DEF
+
+        async def dispatch_tool(self, tool_name, tool_input):
+            return json.dumps({"ok": True})
+
+    # (MAX_LOOP_ITERATIONS - 1) tool_use responses followed by one end_turn text response
+    fill = FakeResponse(tool_name="noop", stop_reason="tool_use")
+    tool_responses = [fill] * (MAX_LOOP_ITERATIONS - 1)
+    text_response = FakeResponse(text="## Final report synthesized.", stop_reason="end_turn")
+
+    agent = _ToolAgent.__new__(_ToolAgent)
+    agent.client = FakeLLMClient(tool_responses + [text_response])
+    agent.model = "fake"
+
+    content = await agent._run_loop([{"role": "user", "content": "investigate"}])
+    text = "".join(b.text for b in content if hasattr(b, "text"))
+    assert "## Final report synthesized." in text
+
+    # Verify that the final LLM call did not include tools
+    final_call = agent.client.calls[MAX_LOOP_ITERATIONS - 1]
+    assert "tools" not in final_call
+
+    # Verify earlier calls DID include tools
+    assert "tools" in agent.client.calls[0]
+
+
+@pytest.mark.asyncio
 async def test_unexpected_stop_reason_raises_agent_error():
     agent = _make_agent([FakeResponse(text="hi", stop_reason="max_tokens")])
     with pytest.raises(AgentError) as exc_info:
@@ -209,6 +284,11 @@ async def test_tool_use_then_end_turn():
     assert result.value == "enriched"
     assert len(agent.client.calls) == 2  # type: ignore[union-attr]
 
+    ledger = json.loads(_latest_agent_run().ledger_json)
+    tool_steps = [step for step in ledger["steps"] if step["step"] == "tool_call"]
+    assert {step["status"] for step in tool_steps} == {"started", "completed"}
+    assert tool_steps[0]["tool"] == "lookup"
+
 
 def test_parse_result_empty_text():
     agent = _make_agent([])
@@ -224,3 +304,13 @@ def test_agent_error_to_dict():
     assert d["category"] == "parse_error"
     assert d["agent"] == "myagent"
     assert "bad JSON" in d["message"]  # type: ignore[operator]
+
+
+@pytest.mark.asyncio
+async def test_run_structured_passes_low_temperature_to_client():
+    """_run_structured must always use temperature=0.2 for schema-constrained calls."""
+    payload = json.dumps({"value": "ok", "score": 1})
+    agent = _make_agent([FakeResponse(text=payload)])
+    await agent._run_structured("do something", _SimpleResult)
+    call_kwargs = agent.client.calls[0]  # type: ignore[union-attr]
+    assert call_kwargs.get("temperature") == 0.2

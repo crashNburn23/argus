@@ -41,6 +41,8 @@ export default function Tools() {
     return files.filter(file => !normalized || [file.stem, ...file.tool_names].some(value => value.toLowerCase().includes(normalized)))
   }, [files, query])
   const availableCount = statuses.filter(status => status.available).length
+  const blockedCount = statuses.filter(status => status.blocked).length
+  const needsConfigCount = statuses.filter(status => !status.available && !status.blocked).length
   const selectedFile = files.find(file => file.filename === selected)
   const lineCount = fileContent ? fileContent.content.split('\n').length : 0
 
@@ -72,7 +74,7 @@ export default function Tools() {
             <div className="grid gap-3 sm:grid-cols-3">
               <Summary icon={PlugZap} label="Registered capabilities" value={String(statuses.length)} />
               <Summary icon={CheckCircle2} label="Available now" value={String(availableCount)} tone="success" />
-              <Summary icon={XCircle} label="Need configuration" value={String(statuses.length - availableCount)} tone="muted" />
+              <Summary icon={XCircle} label={blockedCount > 0 ? 'Blocked by policy' : 'Need configuration'} value={String(blockedCount > 0 ? blockedCount : needsConfigCount)} tone="muted" />
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -93,6 +95,7 @@ export default function Tools() {
                 {visibleFiles.map(file => {
                   const toolStatuses = file.tool_names.map(name => statusMap.get(name)).filter(Boolean)
                   const available = toolStatuses.length > 0 && toolStatuses.some(status => status?.available)
+                  const blocked = toolStatuses.length > 0 && toolStatuses.every(status => status?.blocked)
                   const reason = toolStatuses.find(status => !status?.available)?.reason
                   const internal = file.tool_names.length === 0
                   return (
@@ -102,8 +105,8 @@ export default function Tools() {
                           <h2 className="font-medium text-foreground">{displayName(file.stem)}</h2>
                           <p className="mt-1 text-xs text-muted-foreground">{internal ? 'Internal support module' : `${file.tool_names.length} ${file.tool_names.length === 1 ? 'capability' : 'capabilities'}`}</p>
                         </div>
-                        <span className={cn('shrink-0 rounded-full px-2 py-1 text-[11px] font-medium', internal ? 'bg-muted text-muted-foreground' : available ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning')}>
-                          {internal ? 'internal' : available ? 'available' : 'setup needed'}
+                        <span className={cn('shrink-0 rounded-full px-2 py-1 text-[11px] font-medium', internal ? 'bg-muted text-muted-foreground' : available ? 'bg-success/10 text-success' : blocked ? 'bg-muted text-muted-foreground' : 'bg-warning/10 text-warning')}>
+                          {internal ? 'internal' : available ? 'available' : blocked ? 'blocked' : 'setup needed'}
                         </span>
                       </div>
                       {file.tool_names.length > 0 && <div className="mt-4 flex flex-wrap gap-1.5">{file.tool_names.map(name => <span key={name} className="rounded bg-surface-raised px-2 py-1 font-mono text-[11px] text-muted-foreground">{name}</span>)}</div>}

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import re
 import time
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlparse
 
 import structlog
 
@@ -55,11 +57,15 @@ WORKFLOW — URL QUERIES (highest priority):
    From the content, identify:
      - Threat actor name + incident context (e.g. "Icarus extortion group Klue OAuth
        breach June 2026", NOT just "Icarus" which may match unrelated groups)
+     - Whether named organizations are report authors/research teams versus adversaries.
+       Do not treat phrases like "Adversary Pursuit Group identified..." as actor attribution.
 3. In your NEXT response after url_fetch, issue BOTH tool calls in the SAME response:
-   - threat_actor_agent: pass the actor name WITH incident context to disambiguate
-   - case_analysis_agent: pass extracted_iocs.ips and extracted_iocs.domains directly
-     from the url_fetch result. Do NOT copy IPs from the article text yourself — use
-     the pre-extracted list. If extracted_iocs is absent, do NOT guess any IPs.
+   - threat_actor_agent: only when a real adversary/threat actor/campaign name is present;
+     pass the actor name WITH incident context to disambiguate. If only the reporting team
+     is named, do not call threat_actor_agent for that team.
+   - case_analysis_agent: pass extracted_iocs.ips, domains, hashes, urls, and ip_ports
+     directly from the url_fetch result. Do NOT copy IOC values from the article text
+     yourself — use the pre-extracted list. If extracted_iocs is absent, do NOT guess IOCs.
    Issuing both in the same response runs them in parallel — do NOT call one and wait.
 4. Synthesize all results. Reference source URLs from agent outputs in your final answer.
 
@@ -220,6 +226,16 @@ _AGENT_TOOL_DEFINITIONS = [
                     "items": {"type": "string"},
                     "description": "File hashes (MD5/SHA256) found verbatim in the article.",
                 },
+                "urls": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "URLs found verbatim or de-fanged in the article.",
+                },
+                "ip_ports": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "IP:port endpoints found verbatim in the article.",
+                },
                 "context": {
                     "type": "string",
                     "description": (
@@ -285,15 +301,122 @@ class CTIOrchestrator:
         self._conversation.clear()
 
     # Public IPs only (RFC1918/loopback excluded).
-    _IP_RE = re.compile(
-        r"\b(?!10\.|127\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.)"
-        r"(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b"
+    _IP_PATTERN = (
+        r"(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}"
+        r"(?:25[0-5]|2[0-4]\d|[01]?\d\d?)"
     )
+    _IP_RE = re.compile(rf"\b{_IP_PATTERN}\b")
+    _IP_PORT_RE = re.compile(rf"\b({_IP_PATTERN}):([1-9]\d{{0,4}})\b")
+    _HASH_RE = re.compile(
+        r"\b(?:[A-Fa-f0-9]{64}|[A-Fa-f0-9]{40}|[A-Fa-f0-9]{32})\b"
+    )
+    _URL_RE = re.compile(r"\b(?:hxxps?|https?)://[^\s<>()\"']+", re.IGNORECASE)
+    _DOMAIN_RE = re.compile(
+        r"\b(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
+        r"[A-Za-z]{2,63}\b"
+    )
+    _DOMAIN_NOISE_TLDS = {
+        "bmp",
+        "css",
+        "dll",
+        "exe",
+        "gif",
+        "html",
+        "ico",
+        "jpg",
+        "jpeg",
+        "js",
+        "json",
+        "log",
+        "png",
+        "ps1",
+        "py",
+        "svg",
+        "txt",
+        "xml",
+        "zip",
+    }
+
+    @staticmethod
+    def _dedupe_limit(values: list[str], limit: int) -> list[str]:
+        cleaned = [v.strip().strip(".,;:)]}>\"'") for v in values if v.strip()]
+        return list(dict.fromkeys(v for v in cleaned if v))[:limit]
+
+    @staticmethod
+    def _refang(text: str) -> str:
+        text = re.sub(r"hxxps?://", lambda m: m.group(0).replace("hxxp", "http"), text, flags=re.I)
+        text = re.sub(r"\[\.\]|\(\.\)|\{\.}|\\\.", ".", text)
+        return text
 
     @classmethod
-    def _extract_iocs_from_text(cls, text: str) -> dict[str, list[str]]:
-        ips = list(dict.fromkeys(cls._IP_RE.findall(text)))
-        return {"ips": ips[:20], "domains": []}
+    def _is_public_ip(cls, value: str) -> bool:
+        try:
+            ip = ipaddress.ip_address(value)
+        except ValueError:
+            return False
+        return not (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        )
+
+    @classmethod
+    def _is_material_domain(cls, domain: str, source_host: str | None) -> bool:
+        lowered = domain.lower().strip(".")
+        if source_host and (lowered == source_host or lowered.endswith(f".{source_host}")):
+            return False
+        if lowered.split(".")[-1] in cls._DOMAIN_NOISE_TLDS:
+            return False
+        if lowered.startswith(("www.", "cdn.", "api.")) and source_host:
+            host_base = source_host.removeprefix("www.")
+            if lowered.endswith(host_base):
+                return False
+        return True
+
+    @staticmethod
+    def _is_material_url(url: str, source_host: str | None) -> bool:
+        if not source_host:
+            return True
+        host = urlparse(url).netloc.lower().removeprefix("www.")
+        return not (host == source_host or host.endswith(f".{source_host}"))
+
+    @classmethod
+    def _extract_iocs_from_text(
+        cls, text: str, source_url: str | None = None
+    ) -> dict[str, list[str]]:
+        refanged = cls._refang(text)
+        source_host = None
+        if source_url:
+            source_host = urlparse(source_url).netloc.lower().removeprefix("www.") or None
+
+        ips = [ip for ip in cls._IP_RE.findall(refanged) if cls._is_public_ip(ip)]
+        ip_ports = [
+            f"{ip}:{port}"
+            for ip, port in cls._IP_PORT_RE.findall(refanged)
+            if int(port) <= 65535 and cls._is_public_ip(ip)
+        ]
+        hashes = cls._HASH_RE.findall(refanged)
+        urls = [
+            url
+            for url in cls._URL_RE.findall(refanged)
+            if cls._is_material_url(url, source_host)
+        ]
+        domains = [
+            domain.lower()
+            for domain in cls._DOMAIN_RE.findall(refanged)
+            if cls._is_material_domain(domain, source_host)
+        ]
+
+        return {
+            "ips": cls._dedupe_limit(ips, 50),
+            "ip_ports": cls._dedupe_limit(ip_ports, 50),
+            "domains": cls._dedupe_limit(domains, 100),
+            "hashes": cls._dedupe_limit(hashes, 100),
+            "urls": cls._dedupe_limit(urls, 50),
+        }
 
     async def _invoke_agent(self, tool_name: str, tool_input: dict[str, Any]) -> str:
         from argus.tools.web_search import url_fetch as _url_fetch
@@ -318,13 +441,15 @@ class CTIOrchestrator:
                     parsed = json.loads(raw_result)
                     if parsed.get("status") == "ok" and parsed.get("content"):
                         content = parsed["content"]
-                        extracted = self._extract_iocs_from_text(content)
-                        if extracted["ips"]:
+                        extracted = self._extract_iocs_from_text(content, parsed.get("url"))
+                        if any(extracted.values()):
                             parsed["extracted_iocs"] = extracted
                             log.info(
                                 "orchestrator.ioc_extract",
                                 ips=extracted["ips"],
-                                count=len(extracted["ips"]),
+                                domains=extracted["domains"],
+                                hashes=len(extracted["hashes"]),
+                                count=sum(len(v) for v in extracted.values()),
                             )
                         # Truncate article for orchestrator routing context —
                         # extracted_iocs carries the structured data; agents can
@@ -350,14 +475,20 @@ class CTIOrchestrator:
                 ips = tool_input.get("ips") or []
                 domains = tool_input.get("domains") or []
                 hashes = tool_input.get("hashes") or []
+                urls = tool_input.get("urls") or []
+                ip_ports = tool_input.get("ip_ports") or []
                 context = tool_input.get("context") or tool_input.get("query") or ""
                 parts = [context]
                 if ips:
                     parts.append(f"IPs: {', '.join(str(ip) for ip in ips)}")
+                if ip_ports:
+                    parts.append(f"IP:port endpoints: {', '.join(str(ep) for ep in ip_ports)}")
                 if domains:
                     parts.append(f"Domains: {', '.join(str(d) for d in domains)}")
                 if hashes:
                     parts.append(f"Hashes: {', '.join(str(h) for h in hashes)}")
+                if urls:
+                    parts.append(f"URLs: {', '.join(str(u) for u in urls)}")
                 coro = self._agents["case_analysis_agent"].run(query=". ".join(parts))
             else:
                 return json.dumps({"error": f"Unknown agent: {tool_name}"})

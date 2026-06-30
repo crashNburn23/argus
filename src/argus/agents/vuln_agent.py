@@ -55,6 +55,11 @@ Use all available tools. Return your analysis as a JSON object matching VulnInte
   "summary": "..."
 }
 
+Before producing your final JSON, recheck:
+- Does every CVE have a severity (not null) and an exploitation_status?
+- If in_cisa_kev is true, is exploitation_status "active" or "weaponized" (never "unknown")?
+- Is shodan_exposure_count null (Shodan vuln filter is unavailable on current plan)?
+
 Return ONLY valid JSON."""
 
 

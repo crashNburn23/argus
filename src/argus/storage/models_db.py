@@ -53,4 +53,5 @@ class AgentRunRecord(Base):
     duration_seconds: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(32), default="success")
     error_category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ledger_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

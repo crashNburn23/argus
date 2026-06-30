@@ -45,10 +45,19 @@ VIRUSTOTAL_API_KEY=
 SHODAN_API_KEY=
 OTX_API_KEY=
 RECORDED_FUTURE_API_KEY=
+
+# Optional data-disclosure controls
+# unrestricted | confirm-external | local-only
+DISCLOSURE_MODE=unrestricted
 ```
 
 Free sources (no key needed): MITRE ATT&CK, NVD, CISA KEV, URLhaus, passive DNS,
 SSL certs, WHOIS, web search.
+
+Use `DISCLOSURE_MODE=confirm-external` to prompt before interactive or `argus ask`
+queries are sent to the configured model. Use `DISCLOSURE_MODE=local-only` with
+`MODEL_PROVIDER=ollama` to keep model traffic local and block all external enrichment,
+pivot, and tool calls.
 
 Run `argus doctor` to check what's configured before you start.
 
@@ -269,7 +278,7 @@ uv run ruff check src tests
 uv run mypy src/argus --ignore-missing-imports
 ```
 
-CI (pre-commit hooks) runs all three on every push. Currently 177 tests.
+CI (pre-commit hooks) runs all three on every push. Currently 210 tests.
 
 ## TODO
 

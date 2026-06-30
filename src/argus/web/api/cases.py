@@ -507,18 +507,26 @@ async def stream_review_case(
 
 
 class UpdateNoteRequest(BaseModel):
-    body: str
+    body: str | None = None
+    analyst_review: str | None = None
 
 
 @router.patch("/{case_id}/notes/{note_id}")
 async def update_note(case_id: str, note_id: str, req: UpdateNoteRequest) -> dict[str, Any]:
     def _mutate(case: Case) -> Case:
-        new_notes = [
-            n.model_copy(update={"body": req.body}) if n.note_id == note_id else n
-            for n in case.notes
-        ]
         if not any(n.note_id == note_id for n in case.notes):
             raise HTTPException(status_code=404, detail="Note not found")
+        new_notes = []
+        for n in case.notes:
+            if n.note_id != note_id:
+                new_notes.append(n)
+                continue
+            updates: dict[str, Any] = {}
+            if req.body is not None:
+                updates["body"] = req.body
+            if req.analyst_review is not None:
+                updates["metadata"] = {**n.metadata, "analyst_review": req.analyst_review}
+            new_notes.append(n.model_copy(update=updates) if updates else n)
         return case.model_copy(update={"notes": new_notes})
 
     try:
@@ -543,8 +551,16 @@ async def delete_note(case_id: str, note_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Case not found")
 
 
+class ReanalyzeRequest(BaseModel):
+    feedback: str | None = None
+
+
 @router.post("/{case_id}/notes/{note_id}/reanalyze")
-async def reanalyze_note(case_id: str, note_id: str) -> dict[str, Any]:
+async def reanalyze_note(
+    case_id: str,
+    note_id: str,
+    req: ReanalyzeRequest | None = None,
+) -> dict[str, Any]:
     try:
         case = CaseStore().get(case_id)
     except CaseNotFoundError:
@@ -554,11 +570,17 @@ async def reanalyze_note(case_id: str, note_id: str) -> dict[str, Any]:
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
+    feedback_text = (req.feedback if req else None) or note.metadata.get("analyst_review")
+    feedback_block = (
+        f"\n\nAnalyst review/feedback to consider:\n{feedback_text}" if feedback_text else ""
+    )
+
     query = (
         f"Case: {case.title}\n\n"
         f"Re-analyze the following analyst note from an adversary infrastructure "
         f"and threat intelligence perspective. Identify IOCs, attribute to known "
-        f"actors or campaigns, and provide actionable recommendations.\n\n"
+        f"actors or campaigns, and provide actionable recommendations."
+        f"{feedback_block}\n\n"
         f"Note:\n{note.body}"
     )
 

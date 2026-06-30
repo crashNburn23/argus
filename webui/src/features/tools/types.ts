@@ -15,4 +15,8 @@ export interface ToolStatus {
   name: string
   available: boolean
   reason?: string
+  configured?: boolean
+  blocked?: boolean
+  locality?: string
+  data_sent?: string
 }

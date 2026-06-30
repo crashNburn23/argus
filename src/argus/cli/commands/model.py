@@ -12,6 +12,7 @@ from rich.table import Table
 
 from argus.cli.output import console, print_error
 from argus.config.settings import get_settings
+from argus.llm.capabilities import model_capabilities
 
 
 def list_ollama_models(base_url: str, timeout: float = 5.0) -> list[str]:
@@ -29,6 +30,33 @@ def persist_model(provider: str, model_name: str, env_path: Path = Path(".env"))
     set_key(str(env_path), "MODEL_PROVIDER", provider)
     set_key(str(env_path), "MODEL", model_name)
     get_settings.cache_clear()
+
+
+def yes_no(value: bool) -> str:
+    return "yes" if value else "no"
+
+
+def capability_summary(provider: str, model_name: str) -> str:
+    caps = model_capabilities(provider, model_name)
+    return (
+        f"tools={yes_no(caps.tool_calling)}, "
+        f"structured={yes_no(caps.structured_output)}, "
+        f"recommended={caps.recommendation}"
+    )
+
+
+def add_capability_row(table: Table, provider: str, model_name: str) -> None:
+    caps = model_capabilities(provider, model_name)
+    context = str(caps.context_window) if caps.context_window is not None else "unknown"
+    notes = caps.caution_summary or caps.recommendation
+    table.add_row(
+        model_name,
+        yes_no(caps.tool_calling),
+        yes_no(caps.structured_output),
+        context,
+        caps.recommendation,
+        notes,
+    )
 
 
 def model_command(
@@ -51,9 +79,15 @@ def model_command(
     """Show or select the model used by all agents."""
     settings = get_settings()
     if model_name is None:
+        current = model_capabilities(settings.model_provider, settings.model)
         console.print(
             f"Current: [bold]{settings.model_provider}[/bold] / [bold]{settings.model}[/bold]"
         )
+        console.print(
+            f"Capabilities: {capability_summary(settings.model_provider, settings.model)}"
+        )
+        if current.cautions:
+            console.print(f"[yellow]Caution:[/yellow] {current.caution_summary}")
         try:
             models = list_ollama_models(settings.ollama_base_url)
         except Exception as exc:
@@ -62,8 +96,13 @@ def model_command(
 
         table = Table(title="Local Ollama Models")
         table.add_column("Model")
+        table.add_column("Tools")
+        table.add_column("Structured")
+        table.add_column("Context")
+        table.add_column("Recommended")
+        table.add_column("Notes")
         for local_model in models:
-            table.add_row(local_model)
+            add_capability_row(table, "ollama", local_model)
         console.print(table)
         return
 
@@ -80,3 +119,18 @@ def model_command(
 
     persist_model(provider, model_name)
     console.print(f"Selected [bold]{provider}[/bold] / [bold]{model_name}[/bold] in .env")
+    caps = model_capabilities(provider, model_name)
+    console.print(f"Capabilities: {capability_summary(provider, model_name)}")
+    if caps.cautions:
+        console.print(f"[yellow]Caution:[/yellow] {caps.caution_summary}")
+    if not caps.tool_calling:
+        console.print(
+            "[yellow]Warning:[/yellow] This model does not support tool calling. "
+            "Agents that use enrichment tools (triage, case analysis, threat actor) "
+            "will not function correctly. Use a tool-capable model for agent workflows."
+        )
+    if not caps.structured_output:
+        console.print(
+            "[yellow]Warning:[/yellow] This model does not support native structured output. "
+            "Argus will fall back to json_repair parsing — validate results carefully."
+        )

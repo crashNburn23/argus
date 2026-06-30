@@ -30,6 +30,7 @@ def render_diagnostics(result: DiagnosticResult, as_json: bool = False) -> None:
         "ready": "cp.green",
         "configured": "cp.cyan",
         "disabled": "cp.dim",
+        "blocked": "cp.amber",
         "misconfigured": "cp.amber",
         "failed": "cp.red",
     }

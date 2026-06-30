@@ -48,6 +48,8 @@ class LLMClient(Protocol):
         system: str,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        response_format: dict[str, Any] | None = None,
+        temperature: float | None = None,
     ) -> LLMResponse: ...
 
 
@@ -61,6 +63,13 @@ class AnthropicClient:
         )
 
     def create_message(self, **kwargs: Any) -> LLMResponse:
+        # Anthropic's Messages API does not accept Ollama-style structured-output
+        # format hints. BaseAgent still validates the returned text against Pydantic.
+        kwargs.pop("response_format", None)
+        # Anthropic uses float temperature directly; None means use API default (1.0).
+        temperature = kwargs.pop("temperature", None)
+        if temperature is not None:
+            kwargs["temperature"] = temperature
         # Use streaming to prevent load-balancer 300s idle TCP drops.
         # Tokens flow immediately — no silent idle period for the LB to kill.
         with self._client.messages.stream(**kwargs) as stream:
@@ -93,15 +102,22 @@ class OllamaClient:
         system: str,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        response_format: dict[str, Any] | None = None,
+        temperature: float | None = None,
     ) -> LLMResponse:
+        options: dict[str, Any] = {"num_predict": max_tokens}
+        if temperature is not None:
+            options["temperature"] = temperature
         payload: dict[str, Any] = {
             "model": model,
             "messages": [{"role": "system", "content": system}, *self._convert_messages(messages)],
             "stream": False,
-            "options": {"num_predict": max_tokens},
+            "options": options,
         }
         if tools:
             payload["tools"] = [self._convert_tool(tool) for tool in tools]
+        if response_format:
+            payload["format"] = response_format
 
         response = self._client.post("/api/chat", json=payload)
         response.raise_for_status()

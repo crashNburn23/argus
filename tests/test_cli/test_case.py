@@ -366,6 +366,35 @@ def test_case_enrich_skips_already_enriched_observables() -> None:
     assert second_call_count == first_call_count
 
 
+def test_case_enrich_local_only_blocks_direct_collection(monkeypatch) -> None:
+    monkeypatch.setenv("DISCLOSURE_MODE", "local-only")
+    monkeypatch.setenv("ABUSEIPDB_API_KEY", "test-abuseipdb-key")
+    from argus.config.settings import get_settings
+
+    get_settings.cache_clear()
+    runner = CliRunner()
+
+    created = runner.invoke(app, ["case", "create", "Local-only enrich", "--json"])
+    case_id = json.loads(created.stdout)["case_id"]
+    runner.invoke(
+        app,
+        ["case", "artifact", case_id, "--text", "198.51.100.10 CVE-2021-44228", "--type", "report"],
+    )
+    runner.invoke(app, ["case", "extract", case_id])
+
+    with (
+        patch("argus.tools.abuseipdb.abuseipdb_check", new_callable=AsyncMock) as mock_abuseipdb,
+        patch("argus.tools.nvd.nvd_cve_lookup", new_callable=AsyncMock) as mock_nvd,
+    ):
+        result = runner.invoke(app, ["case", "enrich", case_id, "--json"])
+
+    assert result.exit_code == 0, result.output or result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["added"] == 0
+    mock_abuseipdb.assert_not_called()
+    mock_nvd.assert_not_called()
+
+
 def test_case_report_generates_markdown_from_evidence() -> None:
     runner = CliRunner()
 
@@ -571,6 +600,38 @@ def test_case_pivot_skips_already_pivoted_observables(monkeypatch) -> None:
     assert second_whois == first_whois
 
 
+def test_case_pivot_local_only_blocks_direct_collection(monkeypatch) -> None:
+    monkeypatch.setenv("DISCLOSURE_MODE", "local-only")
+    monkeypatch.setenv("VIRUSTOTAL_API_KEY", "test-vt-key")
+    from argus.config.settings import get_settings
+
+    get_settings.cache_clear()
+    runner = CliRunner()
+
+    created = runner.invoke(app, ["case", "create", "Local-only pivot", "--json"])
+    case_id = json.loads(created.stdout)["case_id"]
+    runner.invoke(
+        app,
+        ["case", "artifact", case_id, "--text", "malware.example", "--type", "report"],
+    )
+    runner.invoke(app, ["case", "extract", case_id])
+
+    with (
+        patch("argus.tools.passive_dns.passive_dns_lookup", new_callable=AsyncMock) as mock_pdns,
+        patch("argus.tools.certs.ssl_cert_lookup", new_callable=AsyncMock) as mock_cert,
+        patch("argus.tools.whois.whois_lookup", new_callable=AsyncMock) as mock_whois,
+    ):
+        result = runner.invoke(app, ["case", "pivot", case_id, "--json"])
+
+    assert result.exit_code == 0, result.output or result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["new_evidence"] == 0
+    assert payload["new_relationships"] == 0
+    mock_pdns.assert_not_called()
+    mock_cert.assert_not_called()
+    mock_whois.assert_not_called()
+
+
 def test_case_analyze_generates_llm_report_and_stores_artifact() -> None:
     runner = CliRunner()
 
@@ -723,3 +784,95 @@ def test_case_analyze_with_review_flag_shows_grounding_result() -> None:
 
     assert result.exit_code == 0, result.output or result.stderr
     assert "review passed" in result.output or "grounded" in result.output
+
+
+def test_case_analyze_plan_flag_shows_claims_then_generates() -> None:
+    """--plan shows claims and proceeds when analyst confirms."""
+    runner = CliRunner()
+
+    from argus.models.report import ProposedClaim, ReportPlan
+
+    created = runner.invoke(app, ["case", "create", "Plan test", "--json"])
+    case_id = json.loads(created.stdout)["case_id"]
+    runner.invoke(
+        app,
+        ["case", "artifact", case_id, "--text", "198.51.100.10 abuse score 87", "--type", "report"],
+    )
+    runner.invoke(app, ["case", "extract", case_id])
+
+    fake_plan = ReportPlan(
+        proposed_claims=[
+            ProposedClaim(
+                claim="198.51.100.10 is malicious", evidence_ids=["ev_abc"], confidence=0.9
+            )
+        ],
+        known_gaps=["No actor attribution available"],
+        summary="One confirmed malicious IP with high abuse score.",
+    )
+
+    with (
+        patch(
+            "argus.agents.case_report_agent.CaseReportAgent.plan",
+            new_callable=AsyncMock,
+            return_value=fake_plan,
+        ),
+        patch(
+            "argus.agents.case_report_agent.CaseReportAgent.generate",
+            new_callable=AsyncMock,
+            return_value="# CTI Report\n\n198.51.100.10 is malicious [ev_abc].",
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            ["case", "analyze", case_id, "--plan", "--no-save"],
+            input="y\n",
+        )
+
+    assert result.exit_code == 0, result.output or result.stderr
+    assert "198.51.100.10 is malicious" in result.output
+    assert "No actor attribution" in result.output
+    assert "CTI Report" in result.output
+
+
+def test_case_analyze_plan_flag_cancels_on_rejection() -> None:
+    """--plan exits cleanly when analyst declines to proceed."""
+    runner = CliRunner()
+
+    from argus.models.report import ProposedClaim, ReportPlan
+
+    created = runner.invoke(app, ["case", "create", "Plan cancel test", "--json"])
+    case_id = json.loads(created.stdout)["case_id"]
+    runner.invoke(
+        app,
+        ["case", "artifact", case_id, "--text", "198.51.100.10", "--type", "report"],
+    )
+    runner.invoke(app, ["case", "extract", case_id])
+
+    fake_plan = ReportPlan(
+        proposed_claims=[
+            ProposedClaim(claim="Suspicious IP observed", evidence_ids=["ev_abc"], confidence=0.7)
+        ],
+        summary="One suspicious IP.",
+    )
+
+    generate_mock = AsyncMock()
+    with (
+        patch(
+            "argus.agents.case_report_agent.CaseReportAgent.plan",
+            new_callable=AsyncMock,
+            return_value=fake_plan,
+        ),
+        patch(
+            "argus.agents.case_report_agent.CaseReportAgent.generate",
+            generate_mock,
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            ["case", "analyze", case_id, "--plan", "--no-save"],
+            input="n\n",
+        )
+
+    assert result.exit_code == 0, result.output or result.stderr
+    assert "cancelled" in result.output.lower()
+    generate_mock.assert_not_called()

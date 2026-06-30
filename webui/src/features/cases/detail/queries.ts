@@ -49,8 +49,8 @@ export function useAddNote(caseId: string) {
 export function useUpdateNote(caseId: string) {
   return useDetailMutation(
     caseId,
-    ({ noteId, body }: { noteId: string; body: string }) =>
-      caseDetailApi.updateNote(caseId, noteId, body),
+    ({ noteId, patch }: { noteId: string; patch: { body?: string; analyst_review?: string } }) =>
+      caseDetailApi.updateNote(caseId, noteId, patch),
   )
 }
 
@@ -61,8 +61,10 @@ export function useDeleteNote(caseId: string) {
 }
 
 export function useReanalyzeNote(caseId: string) {
-  return useDetailMutation(caseId, (noteId: string) =>
-    caseDetailApi.reanalyzeNote(caseId, noteId),
+  return useDetailMutation(
+    caseId,
+    ({ noteId, feedback }: { noteId: string; feedback?: string }) =>
+      caseDetailApi.reanalyzeNote(caseId, noteId, feedback),
   )
 }
 

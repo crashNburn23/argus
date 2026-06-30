@@ -89,6 +89,11 @@ Return your analysis as a JSON object matching the ThreatActorResearchResult sch
   "recommended_detections": []
 }
 
+BEFORE OUTPUTTING JSON — recheck:
+- Have you set `source_urls` to the actual URLs from your web search results?
+- Have you set techniques to [] and mitre_group_id to null if ATT&CK returned no groups?
+- Have you confirmed every TTP, campaign, and victim comes from a search result, not memory?
+
 OUTPUT FORMAT — CRITICAL:
 After completing your tool calls, your FINAL response MUST be a raw JSON object ONLY.
 Start your final response with `{` and end with `}`.

@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from argus.config.settings import get_settings
+from argus.disclosure import (
+    disclosure_mode,
+    external_collection_allowed,
+    external_collection_block_reason,
+)
 from argus.tools import (
     abuseipdb,
     alienvault_otx,
@@ -21,6 +28,17 @@ from argus.tools import (
     web_search,
     whois,
 )
+
+
+@dataclass(frozen=True)
+class ToolMetadata:
+    locality: str
+    data_sent: str
+    requires_key: bool
+    mutates_case: bool = False
+    cacheable: bool = True
+    timeout_seconds: int = 30
+
 
 # Maps tool name → availability check lambda
 _AVAILABILITY: dict[str, Callable[..., bool]] = {
@@ -40,6 +58,23 @@ _AVAILABILITY: dict[str, Callable[..., bool]] = {
     "urlhaus_lookup": lambda s: True,
     "web_search": lambda s: True,
     "url_fetch": lambda s: True,
+}
+
+_TOOL_METADATA: dict[str, ToolMetadata] = {
+    "virustotal_lookup": ToolMetadata("external", "ioc", True),
+    "shodan_lookup": ToolMetadata("external", "ioc", True),
+    "recorded_future_search": ToolMetadata("external", "query", True),
+    "abuseipdb_check": ToolMetadata("external", "ioc", True),
+    "otx_lookup": ToolMetadata("external", "ioc_or_query", True),
+    "misp_search": ToolMetadata("external", "query", True),
+    "passive_dns_lookup": ToolMetadata("external", "ioc", True),
+    "ssl_cert_lookup": ToolMetadata("external", "domain_or_ip", False),
+    "whois_lookup": ToolMetadata("external", "domain", False),
+    "mitre_attack_lookup": ToolMetadata("external", "technique_or_actor_query", False),
+    "nvd_cve_lookup": ToolMetadata("external", "cve_or_keyword", False),
+    "urlhaus_lookup": ToolMetadata("external", "url_host_or_hash", False),
+    "web_search": ToolMetadata("external", "search_query", False),
+    "url_fetch": ToolMetadata("external", "url", False),
 }
 
 # Maps tool name → definition getter
@@ -94,6 +129,13 @@ _AGENT_TOOLS: dict[str, list[str]] = {
 }
 
 
+def _blocked_by_policy(name: str, settings: Any) -> bool:
+    metadata = _TOOL_METADATA.get(name)
+    if metadata is None:
+        return False
+    return not external_collection_allowed(settings) and metadata.locality == "external"
+
+
 def get_available_tools(agent_type: str) -> list[dict[str, Any]]:
     """Return Claude tool definitions for tools that are available for the given agent type."""
     settings = get_settings()
@@ -102,7 +144,7 @@ def get_available_tools(agent_type: str) -> list[dict[str, Any]]:
     for name in tool_names:
         check = _AVAILABILITY.get(name)
         defn_fn = _DEFINITIONS.get(name)
-        if check and defn_fn and check(settings):
+        if check and defn_fn and check(settings) and not _blocked_by_policy(name, settings):
             result.append(defn_fn())
     return result
 
@@ -128,6 +170,22 @@ def tool_status() -> list[dict[str, Any]]:
             result.append({"name": name, "available": False, "reason": str(exc)})
             continue
 
+        metadata = _TOOL_METADATA.get(name)
+        blocked = _blocked_by_policy(name, settings)
+        if blocked:
+            result.append(
+                {
+                    "name": name,
+                    "available": False,
+                    "reason": external_collection_block_reason(settings),
+                    "configured": available,
+                    "blocked": True,
+                    "locality": metadata.locality if metadata else "unknown",
+                    "data_sent": metadata.data_sent if metadata else "unknown",
+                }
+            )
+            continue
+
         if available:
             reason = (
                 "ready (no key required)"
@@ -148,7 +206,17 @@ def tool_status() -> list[dict[str, Any]]:
                 reason = "MISP_URL not configured"
             else:
                 reason = "API key not configured"
-        result.append({"name": name, "available": available, "reason": reason})
+        result.append(
+            {
+                "name": name,
+                "available": available,
+                "reason": reason,
+                "configured": available,
+                "blocked": False,
+                "locality": metadata.locality if metadata else "unknown",
+                "data_sent": metadata.data_sent if metadata else "unknown",
+            }
+        )
     return result
 
 
@@ -189,9 +257,17 @@ async def dispatch_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
 
     handler = _HANDLERS.get(tool_name)
     if handler is None:
-        import json
-
         return json.dumps({"error": f"Unknown tool: {tool_name}"})
+
+    settings = get_settings()
+    if _blocked_by_policy(tool_name, settings):
+        return json.dumps(
+            {
+                "error": "Tool blocked by disclosure policy",
+                "tool": tool_name,
+                "disclosure_mode": disclosure_mode(settings),
+            }
+        )
 
     # Normalize mismatched argument names the LLM sometimes produces.
     if (
@@ -205,8 +281,6 @@ async def dispatch_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
             "entity_type": tool_input.get("entity_type", "actor"),
         }
     if tool_name == "ssl_cert_lookup" and "query" in tool_input and "indicator" not in tool_input:
-        import json
-
         return json.dumps(
             {"error": "ssl_cert_lookup requires indicator + indicator_type, not a search query"}
         )

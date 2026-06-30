@@ -46,6 +46,7 @@ docker/splunk/data/*.tar.gz
 docker/splunk/data/*.zip
 
 # Working / internal docs
+todo.md
 BACKLOG.md
 UX_BACKLOG.md
 PROGRESS.md

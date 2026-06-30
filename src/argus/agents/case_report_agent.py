@@ -7,6 +7,7 @@ from typing import Any
 from argus.agents.base import BaseAgent, ProgressCallback
 from argus.models.case import Case
 from argus.models.evidence import EvidenceStatus
+from argus.models.report import ReportPlan
 
 _COMMON_PREAMBLE = """\
 You are a senior Cyber Threat Intelligence analyst. You have been given a structured
@@ -174,6 +175,10 @@ def _compile_case_prompt(case: Case) -> str:
             if not body:
                 continue
             lines.append(f"- {note.author}: {body}{'…' if len(note.body) > 150 else ''}")
+            meta = note.metadata if isinstance(note.metadata, dict) else {}
+            review = meta.get("analyst_review")
+            if review:
+                lines.append(f"  [Analyst review: {str(review)[:150]}]")
             shown += 1
 
     if case.relationships:
@@ -278,6 +283,43 @@ def _compile_case_prompt(case: Case) -> str:
     return "\n".join(lines)
 
 
+_PLAN_SYSTEM = """\
+You are a senior CTI analyst performing a pre-report planning pass. Before generating a
+finished intelligence product, enumerate what claims you intend to make, what evidence
+supports each claim, what gaps exist, and what assertions must NOT be made.
+
+Rules:
+- Only propose claims grounded in the provided evidence. List the supporting evidence IDs.
+- Mark is_inference=true for claims that extend beyond direct evidence (analytical judgments).
+- Confidence is 0.0–1.0: use 0.8+ for directly evidenced claims, 0.4–0.7 for inferences.
+- known_gaps: list what additional evidence would materially strengthen the report.
+- forbidden_assertions: list specific claims that MUST NOT appear in the report — e.g.,
+  actor attribution when no actor evidence exists, CVE severity when NVD data is absent,
+  or any claim where the only source is a FAILED collection attempt.
+- summary: one paragraph describing the overall evidential picture for this case.
+
+Return ONLY a valid JSON object — no markdown fences, no prose before or after the JSON.
+"""
+
+
+class _ReportPlannerAgent(BaseAgent):
+    """Internal planning agent — runs a pre-report structured pass, no tools."""
+
+    name = "case_report_planner"
+
+    def get_system_prompt(self) -> str:
+        return _PLAN_SYSTEM
+
+    def get_tool_definitions(self) -> list[dict[str, Any]]:
+        return []
+
+    async def dispatch_tool(self, tool_name: str, tool_input: dict[str, Any]) -> str:
+        return "{}"
+
+    async def run(self, **kwargs: Any) -> Any:  # noqa: ANN401
+        raise NotImplementedError
+
+
 class CaseReportAgent(BaseAgent):
     """Generates an audience-specific intelligence product from a case's stored evidence."""
 
@@ -303,6 +345,16 @@ class CaseReportAgent(BaseAgent):
 
     async def run(self, **kwargs: Any) -> Any:  # noqa: ANN401
         return await self.generate(**kwargs)
+
+    async def plan(self, case: Case) -> ReportPlan:
+        """Return a structured pre-report plan: proposed claims, evidence IDs, gaps."""
+        self._progress("case_report: generating pre-report claim plan")
+        case_prompt = _compile_case_prompt(case)
+        planner = _ReportPlannerAgent(progress=self.progress)
+        return await planner._run_structured(
+            f"Plan a {self.audience.upper()} intelligence report for this case.\n\n{case_prompt}",
+            ReportPlan,
+        )
 
     async def generate(self, case: Case) -> str:
         """Return a Markdown intelligence product for the configured audience."""

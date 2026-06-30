@@ -84,6 +84,20 @@ class Recommendation(BaseModel):
         return "" if v is None else str(v)
 
 
+class ProposedClaim(BaseModel):
+    claim: str
+    evidence_ids: list[str] = []
+    confidence: float = 0.5
+    is_inference: bool = False
+
+
+class ReportPlan(BaseModel):
+    proposed_claims: list[ProposedClaim] = []
+    known_gaps: list[str] = []
+    forbidden_assertions: list[str] = []
+    summary: str = ""
+
+
 class CTIReport(BaseModel):
     report_type: ReportType
     title: str = ""

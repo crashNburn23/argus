@@ -1,11 +1,30 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from pytest_httpx import HTTPXMock
 
+from argus.llm.capabilities import model_capabilities
 from argus.llm.client import AnthropicClient, OllamaClient, TextBlock, ToolUseBlock
+
+
+def test_known_ollama_model_capabilities() -> None:
+    caps = model_capabilities("ollama", "qwen2.5:7b")
+
+    assert caps.tool_calling is True
+    assert caps.structured_output is True
+    assert "tool loops" in caps.recommended_for
+
+
+def test_unknown_ollama_model_capabilities_are_conservative() -> None:
+    caps = model_capabilities("ollama", "local-experiment:latest")
+
+    assert caps.tool_calling is False
+    assert caps.structured_output is False
+    assert caps.confidence == "unknown"
+    assert caps.cautions
 
 
 def test_ollama_converts_tools_and_tool_results() -> None:
@@ -77,6 +96,37 @@ def test_ollama_chat_response_with_tool_call(httpx_mock: HTTPXMock) -> None:
     assert response.stop_reason == "tool_use"
     assert response.content[0].name == "lookup"
     assert response.usage.input_tokens == 12
+
+
+def test_ollama_sends_response_format_schema(httpx_mock: HTTPXMock) -> None:
+    schema = {
+        "type": "object",
+        "properties": {"value": {"type": "string"}},
+        "required": ["value"],
+    }
+    httpx_mock.add_response(
+        method="POST",
+        url="http://localhost:11434/api/chat",
+        json={
+            "message": {"role": "assistant", "content": '{"value": "ok"}'},
+            "prompt_eval_count": 10,
+            "eval_count": 4,
+        },
+    )
+
+    response = OllamaClient("http://localhost:11434", 5).create_message(
+        model="qwen3:8b",
+        max_tokens=100,
+        system="Return JSON.",
+        messages=[{"role": "user", "content": "Go"}],
+        response_format=schema,
+    )
+
+    requests = httpx_mock.get_requests()
+    assert requests[0].read()
+    payload = json.loads(requests[0].content)
+    assert payload["format"] == schema
+    assert response.content[0].text == '{"value": "ok"}'
 
 
 # ---------------------------------------------------------------------------
@@ -163,3 +213,86 @@ def test_anthropic_forwards_kwargs_to_sdk() -> None:
     call_kwargs = client._client.messages.stream.call_args.kwargs
     assert call_kwargs["model"] == "claude-opus-4-8"
     assert call_kwargs["max_tokens"] == 2048
+
+
+def test_anthropic_ignores_response_format_hint() -> None:
+    client = _mock_anthropic(text="done")
+    client.create_message(
+        model="claude-opus-4-8",
+        max_tokens=2048,
+        system="sys",
+        messages=[{"role": "user", "content": "go"}],
+        response_format={"type": "object"},
+    )
+    call_kwargs = client._client.messages.stream.call_args.kwargs
+    assert "response_format" not in call_kwargs
+
+
+def test_anthropic_forwards_temperature_to_sdk() -> None:
+    client = _mock_anthropic(text="done")
+    client.create_message(
+        model="claude-opus-4-8",
+        max_tokens=2048,
+        system="sys",
+        messages=[{"role": "user", "content": "go"}],
+        temperature=0.2,
+    )
+    call_kwargs = client._client.messages.stream.call_args.kwargs
+    assert call_kwargs["temperature"] == 0.2
+
+
+def test_anthropic_omits_temperature_when_none() -> None:
+    client = _mock_anthropic(text="done")
+    client.create_message(
+        model="claude-opus-4-8",
+        max_tokens=2048,
+        system="sys",
+        messages=[{"role": "user", "content": "go"}],
+    )
+    call_kwargs = client._client.messages.stream.call_args.kwargs
+    assert "temperature" not in call_kwargs
+
+
+def test_ollama_sends_temperature_in_options(httpx_mock: HTTPXMock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="http://localhost:11434/api/chat",
+        json={
+            "message": {"role": "assistant", "content": '{"value": "ok"}'},
+            "prompt_eval_count": 5,
+            "eval_count": 3,
+        },
+    )
+
+    OllamaClient("http://localhost:11434", 5).create_message(
+        model="qwen3:8b",
+        max_tokens=100,
+        system="Return JSON.",
+        messages=[{"role": "user", "content": "Go"}],
+        temperature=0.2,
+    )
+
+    payload = json.loads(httpx_mock.get_requests()[0].content)
+    assert payload["options"]["temperature"] == 0.2
+
+
+def test_ollama_omits_temperature_when_none(httpx_mock: HTTPXMock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="http://localhost:11434/api/chat",
+        json={
+            "message": {"role": "assistant", "content": "hi"},
+            "prompt_eval_count": 5,
+            "eval_count": 3,
+        },
+    )
+
+    OllamaClient("http://localhost:11434", 5).create_message(
+        model="qwen3:8b",
+        max_tokens=100,
+        system="sys",
+        messages=[{"role": "user", "content": "go"}],
+    )
+
+    payload = json.loads(httpx_mock.get_requests()[0].content)
+    assert "temperature" not in payload["options"]

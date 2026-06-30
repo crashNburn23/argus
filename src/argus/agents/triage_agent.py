@@ -49,6 +49,11 @@ Return your analysis as a JSON object matching AlertTriageResult:
   "summary": "..."
 }
 
+Before producing your final JSON:
+- Recheck each alert: have you extracted all IOCs (IPs, domains, hashes, URLs)?
+- Verify every alert has at least one tool enrichment result before concluding.
+- If an IOC returned no results, note that explicitly in analyst_notes — do not omit it.
+
 Return ONLY valid JSON."""
 
 

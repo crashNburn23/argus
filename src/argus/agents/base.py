@@ -8,7 +8,7 @@ import re
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any, TypeVar
 
 import httpx
@@ -29,8 +29,51 @@ log = structlog.get_logger()
 MAX_LOOP_ITERATIONS = 10
 MAX_PARSE_RETRIES = 2
 
+# Injected into tool-using agents two iterations before the limit
+_LOOP_SYNTHESIS_WARNING = (
+    "You are approaching the iteration limit. After these tool results, write your "
+    "complete final response immediately. Do NOT request any more tools — synthesize "
+    "everything gathered so far into the required output format."
+)
+
 T = TypeVar("T", bound=BaseModel)
 ProgressCallback = Callable[[str], None]
+
+
+def _safe_log(level: str, event: str, **kwargs: Any) -> None:
+    """Avoid failing agent execution when a test/CLI capture stream has been closed."""
+    try:
+        getattr(log, level)(event, **kwargs)
+    except ValueError as exc:
+        if "closed file" not in str(exc):
+            raise
+
+
+def _new_ledger(agent: str, model: str, goal: str, *, prompt_chars: int = 0) -> dict[str, Any]:
+    return {
+        "agent": agent,
+        "model": model,
+        "goal": goal[:500],
+        "prompt_chars": prompt_chars,
+        "steps": [],
+    }
+
+
+def _ledger_step(
+    ledger: dict[str, Any],
+    step: str,
+    status: str,
+    **metadata: Any,
+) -> None:
+    clean_metadata = {key: value for key, value in metadata.items() if value is not None}
+    ledger["steps"].append(
+        {
+            "step": step,
+            "status": status,
+            "timestamp": datetime.now(UTC).isoformat(),
+            **clean_metadata,
+        }
+    )
 
 
 @retry(
@@ -102,43 +145,59 @@ class BaseAgent(ABC):
     @abstractmethod
     async def run(self, **kwargs: Any) -> Any: ...
 
-    async def _run_loop(self, messages: list[dict[str, Any]]) -> list[Any]:
+    async def _run_loop(
+        self,
+        messages: list[dict[str, Any]],
+        response_format: dict[str, Any] | None = None,
+        temperature: float | None = None,
+    ) -> list[Any]:
         """Run the model tool-use loop. Returns final content blocks or raises AgentError."""
         start = time.monotonic()
         tools = self.get_tool_definitions()
         total_input_tokens = 0
         total_output_tokens = 0
-        input_data = str(messages[0]["content"])[:4096] if messages else ""
+        full_prompt = str(messages[0]["content"]) if messages else ""
+        input_data = full_prompt[:4096]
+        ledger = _new_ledger(self.name, self.model, input_data, prompt_chars=len(full_prompt))
 
-        log.info("agent.start", agent=self.name, prompt_len=len(input_data))
-        log.info("agent.input", agent=self.name, text=input_data[:500])
+        _safe_log("info", "agent.start", agent=self.name, prompt_len=len(full_prompt))
+        _safe_log("info", "agent.input", agent=self.name, text=input_data[:500])
         excerpt = input_data[:120].replace("\n", " ")
         self._progress(
-            f"[{self.name}] asked ({len(input_data)} chars): "
-            f"{excerpt}{'…' if len(input_data) > 120 else ''}"
+            f"[{self.name}] asked ({len(full_prompt)} chars): "
+            f"{excerpt}{'…' if len(full_prompt) > 120 else ''}"
         )
 
         try:
             for iteration in range(MAX_LOOP_ITERATIONS):
                 if iteration > 0:
                     self._progress(f"[{self.name}] thinking (iteration {iteration + 1})")
+                _ledger_step(ledger, "model_iteration", "started", iteration=iteration + 1)
                 system = (
                     f"Today's date is {date.today().isoformat()}.\n\n{self.get_system_prompt()}"
                 )
+                is_final_iteration = tools and (iteration == MAX_LOOP_ITERATIONS - 1)
                 kwargs: dict[str, Any] = {
                     "model": self.model,
                     "max_tokens": getattr(self, "max_output_tokens", 8192),
                     "system": system,
                     "messages": messages,
                 }
-                if tools:
+                # On the final iteration of a tool-using agent, drop tools entirely
+                # so the model is forced to produce text output rather than call more tools.
+                if tools and not is_final_iteration:
                     kwargs["tools"] = tools
+                if response_format:
+                    kwargs["response_format"] = response_format
+                if temperature is not None:
+                    kwargs["temperature"] = temperature
 
                 response = await _llm_call_with_retry(self.client.create_message, **kwargs)
                 total_input_tokens += response.usage.input_tokens
                 total_output_tokens += response.usage.output_tokens
 
-                log.debug(
+                _safe_log(
+                    "debug",
                     "agent.iteration",
                     agent=self.name,
                     iteration=iteration,
@@ -147,9 +206,19 @@ class BaseAgent(ABC):
                     output_tokens=response.usage.output_tokens,
                 )
 
-                if response.stop_reason == "end_turn":
+                if response.stop_reason == "end_turn" or (
+                    is_final_iteration and response.stop_reason != "tool_use"
+                ):
+                    _ledger_step(
+                        ledger,
+                        "model_iteration",
+                        "completed",
+                        iteration=iteration + 1,
+                        stop_reason=response.stop_reason,
+                    )
                     output_text = self._extract_text(response.content)
-                    log.info(
+                    _safe_log(
+                        "info",
                         "agent.output",
                         agent=self.name,
                         tokens=total_output_tokens,
@@ -167,10 +236,18 @@ class BaseAgent(ABC):
                         total_output_tokens,
                         time.monotonic() - start,
                         status="success",
+                        ledger=ledger,
                     )
                     return response.content  # type: ignore[no-any-return]
 
                 if response.stop_reason != "tool_use":
+                    _ledger_step(
+                        ledger,
+                        "model_iteration",
+                        "blocked",
+                        iteration=iteration + 1,
+                        stop_reason=response.stop_reason,
+                    )
                     self._log_run(
                         input_data,
                         [],
@@ -179,6 +256,7 @@ class BaseAgent(ABC):
                         time.monotonic() - start,
                         status="failed",
                         error_category=AgentFailureCategory.LLM_ERROR.value,
+                        ledger=ledger,
                     )
                     raise AgentError(
                         AgentFailureCategory.LLM_ERROR,
@@ -188,10 +266,30 @@ class BaseAgent(ABC):
 
                 messages.append({"role": "assistant", "content": response.content})
                 tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
+                _ledger_step(
+                    ledger,
+                    "model_iteration",
+                    "requested_tools",
+                    iteration=iteration + 1,
+                    tool_count=len(tool_use_blocks),
+                )
 
                 async def _call_tool(block: Any) -> dict[str, Any]:
                     detail = self._summarize_tool_input(dict(block.input))
-                    log.info("agent.tool_call", agent=self.name, tool=block.name, detail=detail)
+                    _ledger_step(
+                        ledger,
+                        "tool_call",
+                        "started",
+                        tool=block.name,
+                        detail=detail,
+                    )
+                    _safe_log(
+                        "info",
+                        "agent.tool_call",
+                        agent=self.name,
+                        tool=block.name,
+                        detail=detail,
+                    )
                     self._progress(f"[{self.name}] → {block.name}: {detail}")
                     t0 = time.monotonic()
                     try:
@@ -207,7 +305,8 @@ class BaseAgent(ABC):
                                 tool_status = "ok"
                         except Exception:
                             tool_status = "ok"
-                        log.info(
+                        _safe_log(
+                            "info",
                             "agent.tool_result",
                             agent=self.name,
                             tool=block.name,
@@ -219,9 +318,19 @@ class BaseAgent(ABC):
                             f"[{self.name}] ← {block.name}: {tool_status} "
                             f"({elapsed_ms}ms, {len(result_str)}B)"
                         )
+                        _ledger_step(
+                            ledger,
+                            "tool_call",
+                            "completed" if tool_status == "ok" else "blocked",
+                            tool=block.name,
+                            result_status=tool_status,
+                            duration_ms=elapsed_ms,
+                            result_bytes=len(result_str),
+                        )
                     except Exception as e:
                         elapsed_ms = int((time.monotonic() - t0) * 1000)
-                        log.warning(
+                        _safe_log(
+                            "warning",
                             "agent.tool_result",
                             agent=self.name,
                             tool=block.name,
@@ -233,11 +342,34 @@ class BaseAgent(ABC):
                             f"[{self.name}] ← {block.name}: dispatch_error ({elapsed_ms}ms) — {e}"
                         )
                         result_str = json.dumps({"error": str(e)})
+                        _ledger_step(
+                            ledger,
+                            "tool_call",
+                            "blocked",
+                            tool=block.name,
+                            result_status="dispatch_error",
+                            duration_ms=elapsed_ms,
+                            error=str(e)[:500],
+                        )
                     return {"type": "tool_result", "tool_use_id": block.id, "content": result_str}
 
                 tool_results = list(await asyncio.gather(*(_call_tool(b) for b in tool_use_blocks)))
                 messages.append({"role": "user", "content": tool_results})
 
+                # Two iterations before the limit: inject a synthesis warning so the model
+                # knows to wrap up on the next call (which will have no tools available).
+                if tools and iteration == MAX_LOOP_ITERATIONS - 2:
+                    warning = getattr(self, "_synthesis_warning", None) or _LOOP_SYNTHESIS_WARNING
+                    messages.append({"role": "user", "content": warning})
+                    self._progress(f"[{self.name}] loop limit approaching — synthesis injected")
+
+            _ledger_step(
+                ledger,
+                "agent_loop",
+                "blocked",
+                reason="loop_exhausted",
+                max_iterations=MAX_LOOP_ITERATIONS,
+            )
             self._log_run(
                 input_data,
                 [],
@@ -246,6 +378,7 @@ class BaseAgent(ABC):
                 time.monotonic() - start,
                 status="failed",
                 error_category=AgentFailureCategory.LOOP_EXHAUSTED.value,
+                ledger=ledger,
             )
             raise AgentError(
                 AgentFailureCategory.LOOP_EXHAUSTED,
@@ -256,7 +389,8 @@ class BaseAgent(ABC):
         except AgentError:
             raise
         except Exception as exc:
-            log.error(
+            _safe_log(
+                "error",
                 "agent.unexpected_error",
                 agent=self.name,
                 error=str(exc),
@@ -270,6 +404,7 @@ class BaseAgent(ABC):
                 time.monotonic() - start,
                 status="failed",
                 error_category=AgentFailureCategory.LLM_ERROR.value,
+                ledger=ledger,
             )
             raise AgentError(
                 AgentFailureCategory.LLM_ERROR,
@@ -290,7 +425,13 @@ class BaseAgent(ABC):
         for attempt in range(max_parse_retries + 1):
             # Pass a copy so each retry starts from the accumulated messages, not a
             # polluted mid-loop state left by the previous attempt's tool calls.
-            content = await self._run_loop(list(messages))
+            # Low temperature (0.2) is critical for structured output: elevated temp
+            # causes increasingly chaotic output that breaks schema adherence.
+            content = await self._run_loop(
+                list(messages),
+                response_format=result_cls.model_json_schema(),
+                temperature=0.2,
+            )
             text = self._extract_text(content)
             self._progress(f"{self.name}: validating response schema")
             try:
@@ -298,7 +439,8 @@ class BaseAgent(ABC):
             except AgentError as exc:
                 last_error = exc
                 if attempt < max_parse_retries:
-                    log.warning(
+                    _safe_log(
+                        "warning",
                         "agent.parse_retry",
                         agent=self.name,
                         attempt=attempt + 1,
@@ -395,6 +537,7 @@ class BaseAgent(ABC):
         duration: float,
         status: str = "success",
         error_category: str | None = None,
+        ledger: dict[str, Any] | None = None,
     ) -> None:
         try:
             output_text = self._extract_text(output_content)
@@ -410,7 +553,8 @@ class BaseAgent(ABC):
                         duration_seconds=duration,
                         status=status,
                         error_category=error_category,
+                        ledger_json=json.dumps(ledger or {}),
                     )
                 )
         except Exception as e:
-            log.warning("agent.log_run_failed", error=str(e))
+            _safe_log("warning", "agent.log_run_failed", error=str(e))
